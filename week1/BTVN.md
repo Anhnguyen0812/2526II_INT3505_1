@@ -31,7 +31,7 @@ GET https://api.spotify.com/v1/albums/{id}
 Ví dụ:
 
 ```
-GET https://api.spotify.com/v1/albums/4aawyAB9vmq7uQrQ7Y9y7F
+GET https://api.spotify.com/v1/albums/4aawyAB9vmqN3uQ7FjRGTy
 ```
 
 ---
@@ -40,19 +40,25 @@ GET https://api.spotify.com/v1/albums/4aawyAB9vmq7uQrQ7Y9y7F
 
 ```json
 {
-  "album_type": "album",
-  "artists": [
-    {
-      "name": "Bruno Mars",
-      "type": "artist",
-      "uri": "spotify:artist:0du5Z0ST9R70Ju8oqzbeG7"
-    }
-  ],
-  "id": "4aawyAB9vmq7uQrQ7Y9y7F",
-  "name": "24K Magic",
-  "release_date": "2016-11-17",
-  "total_tracks": 9,
-  "type": "album"
+    ...
+    "name": "Global Warming",
+    "release_date": "2012-11-16",
+    "release_date_precision": "day",
+    "type": "album",
+    "uri": "spotify:album:4aawyAB9vmqN3uQ7FjRGTy",
+    "artists": [
+        {
+            "external_urls": {
+                "spotify": "https://open.spotify.com/artist/0TnOYISbd1XYRBk9myaseg"
+            },
+            "href": "https://api.spotify.com/v1/artists/0TnOYISbd1XYRBk9myaseg",
+            "id": "0TnOYISbd1XYRBk9myaseg",
+            "name": "Pitbull",
+            "type": "artist",
+            "uri": "spotify:artist:0TnOYISbd1XYRBk9myaseg"
+        }
+    ],
+    ...
 }
 ```
 
@@ -130,13 +136,25 @@ GET https://nominatim.openstreetmap.org/search?q=Hanoi&format=json
 ```json
 [
   {
-    "place_id": 259685164,
-    "licence": "Data © OpenStreetMap contributors, ODbL 1.0.",
+    "place_id": 420830802,
+    "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+    "osm_type": "relation",
+    "osm_id": 1903516,
     "lat": "21.0283334",
-    "lon": "105.854041",
-    "display_name": "Hồ Hoàn Kiếm, Tràng Tiền, Hoàn Kiếm, Hà Nội, 100000, Việt Nam",
-    "type": "attraction",
-    "importance": 0.8
+    "lon": "105.8540410",
+    "class": "boundary",
+    "type": "administrative",
+    "place_rank": 8,
+    "importance": 0.688724675575044,
+    "addresstype": "city",
+    "name": "Hà Nội",
+    "display_name": "Hà Nội, Việt Nam",
+    "boundingbox": [
+      "20.5645154",
+      "21.3854176",
+      "105.2889615",
+      "106.0200725"
+    ]
   }
 ]
 ```
