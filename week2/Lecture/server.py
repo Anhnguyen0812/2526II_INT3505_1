@@ -1,11 +1,12 @@
-from flask import Flask, jsonify, request, session
+from flask import Flask, jsonify, request, session, make_response
 from flasgger import Swagger
 from functools import wraps
 import os
+import time
 
 app = Flask(__name__)
-# Thiết lập Secret Key để mã hóa Session (Session ID sẽ được lưu trong Cookie)
-app.secret_key = "bi_mat_cua_toi_123" 
+# Thiết lập Secret Key để mã hóa Session
+app.secret_key = "my_secret_key_12345" 
 
 # Cấu hình Swagger
 swagger_config = {
@@ -86,12 +87,12 @@ def get_books():
     """
     return jsonify(books), 200
 
-# 2. Lấy chi tiết một cuốn sách (GET) - Ai cũng có thể xem
+# 2. Lấy chi tiết một cuốn sách (GET) - Cacheable theo chuẩn REST (Browser Cache)
 @app.route('/api/books/<int:book_id>', methods=['GET'])
 @require_auth()
 def get_book(book_id):
     """
-    Lấy thông tin chi tiết một cuốn sách theo ID (Yêu cầu đăng nhập)
+    Lấy thông tin chi tiết một cuốn sách (Sử dụng Browser Cache)
     ---
     security:
       - basicAuth: []
@@ -102,14 +103,26 @@ def get_book(book_id):
         required: true
     responses:
       200:
-        description: Thông tin cuốn sách
+        description: Thông tin cuốn sách (Kèm header Cache-Control)
+        headers:
+          Cache-Control:
+            type: string
+            description: max-age=300 (Lưu tại trình duyệt trong 300 giây)
       404:
         description: Không tìm thấy sách
     """
     book = next((b for b in books if b['id'] == book_id), None)
     if book is None:
         return jsonify({"message": "Không tìm thấy sách"}), 404
-    return jsonify(book), 200
+    
+    # Tạo response object
+    response = make_response(jsonify(book))
+    
+    # Tuân thủ ràng buộc "Cacheable" của REST API
+    # Server chỉ định cho trình duyệt lưu cache kết quả này trong 300 giây
+    response.headers['Cache-Control'] = 'public, max-age=300'
+    
+    return response, 200
 
 # 3. Thêm sách mới (POST) - Chỉ Admin
 @app.route('/api/books', methods=['POST'])
