@@ -3,10 +3,13 @@ from flasgger import Swagger
 from functools import wraps
 import os
 import time
+import jwt
+import datetime
 
 app = Flask(__name__)
-# Thiết lập Secret Key để mã hóa Session
+# Thiết lập Secret Key để mã hóa Session và JWT
 app.secret_key = "my_secret_key_12345" 
+SECRET_KEY = app.secret_key
 
 # Cấu hình Swagger
 swagger_config = {
@@ -28,6 +31,12 @@ template = {
     "securityDefinitions": {
         "basicAuth": {
             "type": "basic"
+        },
+        "bearerAuth": {
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header",
+            "description": "Nhập JWT Token theo định dạng: Bearer <token>"
         }
     }
 }
@@ -44,14 +53,28 @@ def require_auth(role=None):
     def decorator(f):
         @wraps(f)
         def decorated(*args, **kwargs):
-            auth = request.authorization
-            if not auth or auth.username not in users or users[auth.username] != auth.password:
-                return jsonify({"message": "Xác thực thất bại!"}), 401
+            # Kiểm tra JWT Token trong Header Authorization
+            auth_header = request.headers.get('Authorization')
+            if not auth_header:
+                return jsonify({"message": "Thiếu mã xác thực!"}), 401
+            
+            try:
+                # Định dạng là 'Bearer <token>'
+                token = auth_header.split(" ")[1]
+                payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+                current_user = payload['sub']
+                user_role = payload.get('role', 'user')
+            except jwt.ExpiredSignatureError:
+                return jsonify({"message": "Token đã hết hạn!"}), 401
+            except (jwt.InvalidTokenError, IndexError):
+                return jsonify({"message": "Token không hợp lệ!"}), 401
             
             # Phân quyền đơn giản: Nếu là admin thì được làm mọi thứ
-            if role == "admin" and auth.username != "admin":
+            if role == "admin" and user_role != "admin":
                 return jsonify({"message": "Bạn không có quyền admin!"}), 403
             
+            request.user = current_user
+            request.user_role = user_role
             return f(*args, **kwargs)
         return decorated
     return decorator
@@ -77,10 +100,10 @@ def home():
 @require_auth()
 def get_books():
     """
-    Lấy danh sách tất cả các sách trong thư viện (Yêu cầu đăng nhập)
+    Lấy danh sách tất cả các sách trong thư viện (Yêu cầu JWT Token)
     ---
     security:
-      - basicAuth: []
+      - bearerAuth: []
     responses:
       200:
         description: Danh sách các đầu sách
@@ -95,7 +118,7 @@ def get_book(book_id):
     Lấy thông tin chi tiết một cuốn sách (Sử dụng Browser Cache)
     ---
     security:
-      - basicAuth: []
+      - bearerAuth: []
     parameters:
       - name: book_id
         in: path
@@ -129,10 +152,10 @@ def get_book(book_id):
 @require_auth(role="admin")
 def create_book():
     """
-    Thêm một cuốn sách mới vào thư viện (Chỉ Admin)
+    Thêm một cuốn sách mới vào thư viện (Chỉ Admin JWT)
     ---
     security:
-      - basicAuth: []
+      - bearerAuth: []
     parameters:
       - name: body
         in: body
@@ -167,10 +190,10 @@ def create_book():
 @require_auth(role="admin")
 def update_book(book_id):
     """
-    Cập nhật toàn bộ thông tin một cuốn sách (Chỉ Admin)
+    Cập nhật toàn bộ thông tin một cuốn sách (Chỉ Admin JWT)
     ---
     security:
-      - basicAuth: []
+      - bearerAuth: []
     parameters:
       - name: book_id
         in: path
@@ -211,10 +234,10 @@ def update_book(book_id):
 @require_auth(role="admin")
 def delete_book(book_id):
     """
-    Xóa một cuốn sách khỏi thư viện (Chỉ Admin)
+    Xóa một cuốn sách khỏi thư viện (Chỉ Admin JWT)
     ---
     security:
-      - basicAuth: []
+      - bearerAuth: []
     parameters:
       - name: book_id
         in: path
@@ -232,57 +255,74 @@ def delete_book(book_id):
 
 # web session: Stateful (Session ID lưu trong Cookie) vs Stateless (Token-based, không lưu trạng thái trên server)
 
-# 6. Đăng nhập để khởi tạo Session (Stateful)
+# 6. Đăng nhập để lấy JWT Token (Stateless)
 @app.route('/api/login', methods=['POST'])
-@require_auth()
 def login():
     """
-    Đăng nhập hệ thống (Sử dụng Session/Cookie)
+    Đăng nhập hệ thống để nhận JWT Token (Stateless)
     ---
     security:
       - basicAuth: []
     responses:
       200:
-        description: Đăng nhập thành công, Session ID đã được tạo trong Cookie
+        description: Đăng nhập thành công, trả về JWT Token
+        schema:
+          type: object
+          properties:
+            token:
+              type: string
     """
     auth = request.authorization
-    session['username'] = auth.username
-    session['role'] = 'admin' if auth.username == 'admin' else 'user'
-    return jsonify({"message": f"Chào {auth.username}, Session ID đã được khởi tạo trong Cookie!"}), 200
+    if not auth or auth.username not in users or users[auth.username] != auth.password:
+        return jsonify({"message": "Xác thực thất bại!"}), 401
 
-# 7. Lấy thông tin phiên làm việc hiện tại (Stateful)
+    role = 'admin' if auth.username == 'admin' else 'user'
+    
+    # Tạo JWT Token (Stateless)
+    payload = {
+        'sub': auth.username,
+        'role': role,
+        'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=1)
+    }
+    token = jwt.encode(payload, SECRET_KEY, algorithm="HS256")
+    
+    return jsonify({
+        "message": f"Chào {auth.username}, đây là Token của bạn!",
+        "token": token
+    }), 200
+
+# 7. Lấy thông tin từ JWT Token (Stateless)
 @app.route('/api/me', methods=['GET'])
+@require_auth()
 def profile():
     """
-    Lấy thông tin người dùng từ Session ID (Stateful)
+    Lấy thông tin người dùng từ JWT Token (Stateless)
     ---
+    security:
+      - bearerAuth: []
     responses:
       200:
-        description: Thông tin người dùng từ Session
+        description: Thông tin người dùng từ Token
       401:
-        description: Chưa đăng nhập (Không có Session ID hợp lệ)
+        description: Token không hợp lệ hoặc đã hết hạn
     """
-    if 'username' in session:
-        return jsonify({
-            "username": session['username'],
-            "role": session['role'],
-            "status": "Đang hoạt động (Stateful session)"
-        }), 200
-    return jsonify({"message": "Bạn chưa đăng nhập hoặc Session đã hết hạn!"}), 401
+    return jsonify({
+        "username": request.user,
+        "role": request.user_role,
+        "status": "Đang hoạt động (Stateless JWT)"
+    }), 200
 
-# 8. Đăng xuất (Xóa Session)
+# 8. Đăng xuất (Client chỉ cần xóa Token)
 @app.route('/api/logout', methods=['POST'])
 def logout():
     """
-    Đăng xuất (Xóa Session ID)
+    Đăng xuất (Client tự xóa Token, Server không cần làm gì vì stateless)
     ---
     responses:
       200:
-        description: Đã xóa Session
+        description: Hướng dẫn đăng xuất
     """
-    session.pop('username', None)
-    session.pop('role', None)
-    return jsonify({"message": "Đã đăng xuất, Session ID đã bị hủy!"}), 200
+    return jsonify({"message": "Đã đăng xuất! Hãy xóa JWT Token ở phía Client."}), 200
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
