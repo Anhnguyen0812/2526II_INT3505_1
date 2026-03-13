@@ -19,7 +19,7 @@ users = [
 
 products = [
     {"id": 101, "name": "Laptop Dell XPS", "price": 1200, "category": "electronics"},
-    {"id": 102, "name": "iPhone 15 Pro", "price": 999, "category": "electronics"}
+    {"id": 102, "name": "iPhone 15 Pro", "price": 999, "category": "electronics", "description": "Latest iPhone with advanced camera system"}
 ]
 
 orders = [
@@ -64,7 +64,7 @@ def get_user(user_id):
 
 # --- PRODUCT ENDPOINTS ---
 @app.route('/api/v1/products', methods=['GET'])
-def get_products():
+def get_products_v1():
     """
     get products with optional category filter
     ---
@@ -80,7 +80,42 @@ def get_products():
     category = request.args.get('category')
     if category:
         filtered = [p for p in products if p["category"] == category]
+        #delete description field for brevity
+        for p in filtered:
+            p.pop("description", None)
         return jsonify(filtered)
+    return jsonify(products)
+
+
+# --- PRODUCT ENDPOINTS ---
+@app.route('/api/v2/products', methods=['GET'])
+def get_products_v2():
+    """
+    get products with optional category filter
+    ---
+    parameters:
+      - name: category
+        in: query
+        type: string
+        required: false
+        field: getDescription
+    responses:
+        200:
+            description: list of products
+    """
+
+    category = request.args.get('category')
+    if category:
+        filtered = [p for p in products if p["category"] == category]
+        return jsonify(filtered)
+    
+    #if description field is requested, include it in the response
+    if request.args.get('getDescription') == 'true':
+        return jsonify(products)
+    #delete description field for brevity
+    for p in products:
+        p.pop("description", None)
+
     return jsonify(products)
 
 @app.route('/api/v1/products/<int:product_id>', methods=['GET'])
