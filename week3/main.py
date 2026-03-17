@@ -18,8 +18,23 @@ users = [
 ]
 
 products = [
-    {"id": 101, "name": "Laptop Dell XPS", "price": 1200, "category": "electronics"},
-    {"id": 102, "name": "iPhone 15 Pro", "price": 999, "category": "electronics", "description": "Latest iPhone with advanced camera system"}
+    {
+        "id": 101,
+        "name": "Laptop Dell XPS",
+        "price": 1200,
+        "category": "electronics",
+        "stock": 15,
+        "rating": 4.7
+    },
+    {
+        "id": 102,
+        "name": "iPhone 15 Pro",
+        "price": 999,
+        "category": "electronics",
+        "description": "Latest iPhone with advanced camera system",
+        "stock": 32,
+        "rating": 4.9
+    }
 ]
 
 orders = [
@@ -28,6 +43,25 @@ orders = [
 ]
 
 # API versioning: /api/v1/...
+
+
+def serialize_product(product, include_description=False, include_stock=False, include_rating=False):
+    """Build a product response without mutating source data."""
+    item = {
+        "id": product["id"],
+        "name": product["name"],
+        "price": product["price"],
+        "category": product["category"]
+    }
+
+    if include_description and "description" in product:
+        item["description"] = product["description"]
+    if include_stock and "stock" in product:
+        item["stock"] = product["stock"]
+    if include_rating and "rating" in product:
+        item["rating"] = product["rating"]
+
+    return item
 
 # --- USER ENDPOINTS ---
 @app.route('/api/v1/users', methods=['GET'])
@@ -78,45 +112,121 @@ def get_products_v1():
             description: list of products
     """
     category = request.args.get('category')
+    filtered_products = products
     if category:
-        filtered = [p for p in products if p["category"] == category]
-        #delete description field for brevity
-        for p in filtered:
-            p.pop("description", None)
-        return jsonify(filtered)
-    return jsonify(products)
+        filtered_products = [p for p in products if p["category"] == category]
+
+    data = [
+        serialize_product(p, include_description=False, include_stock=False, include_rating=False)
+        for p in filtered_products
+    ]
+    return jsonify({
+        "version": "v1",
+        "data": data
+    })
 
 
 # --- PRODUCT ENDPOINTS ---
 @app.route('/api/v2/products', methods=['GET'])
 def get_products_v2():
     """
-    get products with optional category filter
+    get products with optional category filter and dynamic fields
     ---
     parameters:
       - name: category
         in: query
         type: string
         required: false
-        field: getDescription
+      - name: include
+        in: query
+        type: string
+        required: false
+        description: comma-separated fields to include (description,stock,rating)
+      - name: getDescription
+        in: query
+        type: string
+        required: false
+        description: backward-compatible flag to include description=true
     responses:
         200:
             description: list of products
     """
 
     category = request.args.get('category')
-    if category:
-        filtered = [p for p in products if p["category"] == category]
-        return jsonify(filtered)
-    
-    #if description field is requested, include it in the response
-    if request.args.get('getDescription') == 'true':
-        return jsonify(products)
-    #delete description field for brevity
-    for p in products:
-        p.pop("description", None)
+    include_fields = {
+        field.strip().lower()
+        for field in request.args.get('include', '').split(',')
+        if field.strip()
+    }
 
-    return jsonify(products)
+    include_description = (
+        'description' in include_fields
+        or request.args.get('getDescription', '').lower() == 'true'
+    )
+    include_stock = 'stock' in include_fields
+    include_rating = 'rating' in include_fields
+
+    filtered_products = products
+    if category:
+        filtered_products = [p for p in products if p["category"] == category]
+
+    data = [
+        serialize_product(
+            p,
+            include_description=include_description,
+            include_stock=include_stock,
+            include_rating=include_rating
+        )
+        for p in filtered_products
+    ]
+
+    return jsonify({
+        "version": "v2",
+        "count": len(data),
+        "included_fields": sorted(list(include_fields)),
+        "data": data
+    })
+
+
+@app.route('/api/v2/products/<int:product_id>', methods=['GET'])
+def get_product_v2(product_id):
+    """
+    get product by ID (v2) with dynamic fields
+    ---
+    parameters:
+      - name: product_id
+        in: path
+        type: integer
+        required: true
+      - name: include
+        in: query
+        type: string
+        required: false
+        description: comma-separated fields to include (description,stock,rating)
+    responses:
+      200:
+        description: product details
+      404:
+        description: product not found
+    """
+    product = next((p for p in products if p["id"] == product_id), None)
+    if not product:
+        return jsonify({"error": "Product not found"}), 404
+
+    include_fields = {
+        field.strip().lower()
+        for field in request.args.get('include', '').split(',')
+        if field.strip()
+    }
+
+    return jsonify(
+        serialize_product(
+            product,
+            include_description='description' in include_fields,
+            include_stock='stock' in include_fields,
+            include_rating='rating' in include_fields
+        )
+    )
 
 @app.route('/api/v1/products/<int:product_id>', methods=['GET'])
 def get_product(product_id):
