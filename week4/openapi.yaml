@@ -7,6 +7,8 @@ info:
 servers:
   - url: http://localhost:5000
     description: Local development
+  - url: https://week4-smoky.vercel.app
+    description: Deployed API
 
 tags:
   - name: Books
