@@ -1,0 +1,289 @@
+openapi: 3.0.3
+info:
+  description: |
+    API quan ly sach dung cho buoi thuc hanh OpenAPI + Swagger UI.
+  title: Book Management API
+  version: 1.0.0
+servers:
+- description: Local development
+  url: http://localhost:5000
+- description: Deployed API
+  url: https://week4-smoky.vercel.app
+tags:
+- description: Cac endpoint quan ly sach
+  name: Books
+paths:
+  /api/books:
+    get:
+      description: Co ho tro tim kiem theo ten hoac tac gia qua query `q`.
+      operationId: api_books_get
+      parameters:
+      - description: Tu khoa tim trong title hoac author
+        explode: true
+        in: query
+        name: q
+        required: false
+        schema:
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/Book"
+                type: array
+          description: Danh sach sach
+      summary: Lay danh sach sach
+      tags:
+      - Books
+      x-openapi-router-controller: openapi_server.controllers.books_controller
+    post:
+      operationId: api_books_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBookRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Book"
+          description: Tao thanh cong
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Du lieu dau vao khong hop le
+      summary: Tao sach moi
+      tags:
+      - Books
+      x-openapi-router-controller: openapi_server.controllers.books_controller
+  /api/books/{book_id}:
+    delete:
+      operationId: api_books_book_id_delete
+      parameters:
+      - description: ID cua sach
+        explode: false
+        in: path
+        name: book_id
+        required: true
+        schema:
+          minimum: 1
+          type: integer
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+          description: Xoa thanh cong
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Khong tim thay sach
+      summary: Xoa sach theo ID
+      tags:
+      - Books
+      x-openapi-router-controller: openapi_server.controllers.books_controller
+    get:
+      operationId: api_books_book_id_get
+      parameters:
+      - description: ID cua sach
+        explode: false
+        in: path
+        name: book_id
+        required: true
+        schema:
+          minimum: 1
+          type: integer
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Book"
+          description: Thong tin sach
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Khong tim thay sach
+      summary: Lay chi tiet sach theo ID
+      tags:
+      - Books
+      x-openapi-router-controller: openapi_server.controllers.books_controller
+    put:
+      operationId: api_books_book_id_put
+      parameters:
+      - description: ID cua sach
+        explode: false
+        in: path
+        name: book_id
+        required: true
+        schema:
+          minimum: 1
+          type: integer
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateBookRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Book"
+          description: Cap nhat thanh cong
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Du lieu dau vao khong hop le
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Khong tim thay sach
+      summary: Cap nhat thong tin sach
+      tags:
+      - Books
+      x-openapi-router-controller: openapi_server.controllers.books_controller
+components:
+  parameters:
+    BookId:
+      description: ID cua sach
+      explode: false
+      in: path
+      name: book_id
+      required: true
+      schema:
+        minimum: 1
+        type: integer
+      style: simple
+    SearchQuery:
+      description: Tu khoa tim trong title hoac author
+      explode: true
+      in: query
+      name: q
+      required: false
+      schema:
+        type: string
+      style: form
+  schemas:
+    Book:
+      example:
+        published_year: 2008
+        author: Robert C. Martin
+        id: 1
+        title: Clean Code
+      properties:
+        id:
+          example: 1
+          title: id
+          type: integer
+        title:
+          example: Clean Code
+          title: title
+          type: string
+        author:
+          example: Robert C. Martin
+          title: author
+          type: string
+        published_year:
+          example: 2008
+          title: published_year
+          type: integer
+      required:
+      - author
+      - id
+      - published_year
+      - title
+      title: Book
+      type: object
+    CreateBookRequest:
+      example:
+        published_year: 0
+        author: author
+        title: title
+      properties:
+        title:
+          title: title
+          type: string
+        author:
+          title: author
+          type: string
+        published_year:
+          minimum: 0
+          title: published_year
+          type: integer
+      required:
+      - author
+      - published_year
+      - title
+      title: CreateBookRequest
+      type: object
+    UpdateBookRequest:
+      example:
+        published_year: 0
+        author: author
+        title: title
+      minProperties: 1
+      properties:
+        title:
+          title: title
+          type: string
+        author:
+          title: author
+          type: string
+        published_year:
+          minimum: 0
+          title: published_year
+          type: integer
+      title: UpdateBookRequest
+      type: object
+    ErrorResponse:
+      example:
+        message: Book not found
+      properties:
+        message:
+          example: Book not found
+          title: message
+          type: string
+      required:
+      - message
+      title: ErrorResponse
+      type: object
+    DeleteResponse:
+      example:
+        id: 1
+        message: Book deleted
+      properties:
+        message:
+          example: Book deleted
+          title: message
+          type: string
+        id:
+          example: 1
+          title: id
+          type: integer
+      required:
+      - id
+      - message
+      title: DeleteResponse
+      type: object
