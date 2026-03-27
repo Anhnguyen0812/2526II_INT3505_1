@@ -1,0 +1,19 @@
+{
+  "name": "typespec-api",
+  "version": "1.0.0",
+  "description": "Book Management API defined in TypeSpec format",
+  "scripts": {
+    "build": "tsp compile api.tsp --emit=@typespec/openapi3",
+    "watch": "tsp compile api.tsp --emit=@typespec/openapi3 --watch",
+    "clean": "rm -rf tsp-output"
+  },
+  "keywords": ["typespec", "openapi", "api"],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@typespec/compiler": "^0.52.0",
+    "@typespec/http": "^0.52.0",
+    "@typespec/rest": "^0.52.0",
+    "@typespec/openapi3": "^0.52.0"
+  }
+}

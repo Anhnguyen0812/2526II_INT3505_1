@@ -1,0 +1,215 @@
+#%RAML 1.0
+title: Book Management API
+version: 1.0.0
+description: |
+  API quản lý sách sử dụng RAML 1.0 format.
+  - MIME Type: application/raml+yaml
+  - Support tool: API Designer, MuleSoft
+baseUri: http://localhost:5000
+mediaType: application/json
+
+documentation:
+  - title: Introduction
+    content: |
+      RAML (RESTful API Modeling Language) là một ngôn ngữ được tối ưu hóa
+      để mô tả các API REST một cách rõ ràng và dễ đọc.
+
+types:
+  Book:
+    type: object
+    properties:
+      id:
+        type: integer
+        example: 1
+      title:
+        type: string
+        example: Clean Code
+      author:
+        type: string
+        example: Robert C. Martin
+      published_year:
+        type: integer
+        example: 2008
+    required:
+      - id
+      - title
+      - author
+      - published_year
+
+  CreateBookRequest:
+    type: object
+    properties:
+      title:
+        type: string
+        example: Clean Code
+      author:
+        type: string
+        example: Robert C. Martin
+      published_year:
+        type: integer
+        minimum: 0
+        example: 2008
+    required:
+      - title
+      - author
+      - published_year
+
+  UpdateBookRequest:
+    type: object
+    properties:
+      title:
+        type: string
+      author:
+        type: string
+      published_year:
+        type: integer
+        minimum: 0
+    minProperties: 1
+
+  ErrorResponse:
+    type: object
+    properties:
+      message:
+        type: string
+        example: Book not found
+    required:
+      - message
+
+  DeleteResponse:
+    type: object
+    properties:
+      message:
+        type: string
+        example: Book deleted
+      id:
+        type: integer
+        example: 1
+    required:
+      - message
+      - id
+
+/api/books:
+  description: Tất cả endpoint liên quan đến sách
+  displayName: Books
+
+  get:
+    displayName: List Books
+    description: Lấy danh sách sách hoặc tìm kiếm theo tên/tác giả
+    queryParameters:
+      q:
+        displayName: Search Query
+        type: string
+        required: false
+        description: Từ khóa tìm trong title hoặc author
+    responses:
+      200:
+        description: Danh sách sách
+        body:
+          application/json:
+            type: Book[]
+      500:
+        description: Lỗi server
+        body:
+          application/json:
+            type: ErrorResponse
+
+  post:
+    displayName: Create Book
+    description: Tạo sách mới
+    body:
+      application/json:
+        type: CreateBookRequest
+    responses:
+      201:
+        description: Tạo thành công
+        body:
+          application/json:
+            type: Book
+      400:
+        description: Dữ liệu đầu vào không hợp lệ
+        body:
+          application/json:
+            type: ErrorResponse
+      500:
+        description: Lỗi server
+        body:
+          application/json:
+            type: ErrorResponse
+
+  /{book_id}:
+    displayName: Book by ID
+    uriParameters:
+      book_id:
+        displayName: Book ID
+        type: integer
+        required: true
+        minimum: 1
+        description: ID của sách
+
+    get:
+      displayName: Get Book
+      description: Lấy chi tiết sách
+      responses:
+        200:
+          description: Thông tin sách
+          body:
+            application/json:
+              type: Book
+        404:
+          description: Không tìm thấy sách
+          body:
+            application/json:
+              type: ErrorResponse
+        500:
+          description: Lỗi server
+          body:
+            application/json:
+              type: ErrorResponse
+
+    put:
+      displayName: Update Book
+      description: Cập nhật thông tin sách
+      body:
+        application/json:
+          type: UpdateBookRequest
+      responses:
+        200:
+          description: Cập nhật thành công
+          body:
+            application/json:
+              type: Book
+        400:
+          description: Dữ liệu đầu vào không hợp lệ
+          body:
+            application/json:
+              type: ErrorResponse
+        404:
+          description: Không tìm thấy sách
+          body:
+            application/json:
+              type: ErrorResponse
+        500:
+          description: Lỗi server
+          body:
+            application/json:
+              type: ErrorResponse
+
+    delete:
+      displayName: Delete Book
+      description: Xóa sách
+      responses:
+        200:
+          description: Xóa thành công
+          body:
+            application/json:
+              type: DeleteResponse
+        404:
+          description: Không tìm thấy sách
+          body:
+            application/json:
+              type: ErrorResponse
+        500:
+          description: Lỗi server
+          body:
+            application/json:
+              type: ErrorResponse

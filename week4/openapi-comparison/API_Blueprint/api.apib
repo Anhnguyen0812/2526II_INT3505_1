@@ -1,0 +1,151 @@
+FORMAT: 1A
+HOST: http://localhost:5000
+
+# Book Management API
+
+API quản lý sách sử dụng API Blueprint format.
+
+# Group Books
+
+## Books [/api/books]
+
+Resource cho tất cả các hoạt động liên quan đến sách.
+
+### List Books [GET]
+
+Lấy danh sách sách hoặc tìm kiếm theo tên/tác giả.
+
++ Query Parameters
+  + q (string, optional) - Từ khóa tìm trong title hoặc author
+
++ Response 200 (application/json)
+
+    + Attributes (array[Book])
+
++ Response 500 (application/json)
+
+    + Attributes (ErrorResponse)
+
+### Create Book [POST]
+
+Tạo sách mới.
+
++ Request (application/json)
+
+    + Attributes (CreateBookRequest)
+
++ Response 201 (application/json)
+
+    + Attributes (Book)
+
++ Response 400 (application/json)
+
+    + Attributes (ErrorResponse)
+
++ Response 500 (application/json)
+
+    + Attributes (ErrorResponse)
+
+## Book Detail [/api/books/{book_id}]
+
+Resource cho một sách cụ thể được xác định bằng ID.
+
++ Parameters
+  + book_id (integer, required) - ID của sách (minimum: 1)
+
+### Get Book [GET]
+
+Lấy chi tiết sách theo ID.
+
++ Response 200 (application/json)
+
+    + Attributes (Book)
+
++ Response 404 (application/json)
+
+    + Attributes (ErrorResponse)
+
++ Response 500 (application/json)
+
+    + Attributes (ErrorResponse)
+
+### Update Book [PUT]
+
+Cập nhật thông tin sách.
+
++ Request (application/json)
+
+    + Attributes (UpdateBookRequest)
+
++ Response 200 (application/json)
+
+    + Attributes (Book)
+
++ Response 400 (application/json)
+
+    + Attributes (ErrorResponse)
+
++ Response 404 (application/json)
+
+    + Attributes (ErrorResponse)
+
++ Response 500 (application/json)
+
+    + Attributes (ErrorResponse)
+
+### Delete Book [DELETE]
+
+Xóa sách.
+
++ Response 200 (application/json)
+
+    + Attributes (DeleteResponse)
+
++ Response 404 (application/json)
+
+    + Attributes (ErrorResponse)
+
++ Response 500 (application/json)
+
+    + Attributes (ErrorResponse)
+
+# Data Structures
+
+## Book (object)
+
+Một sách trong hệ thống.
+
++ id: 1 (integer, required) - ID của sách
++ title: `Clean Code` (string, required) - Tiêu đề sách
++ author: `Robert C. Martin` (string, required) - Tác giả
++ published_year: 2008 (integer, required) - Năm xuất bản
+
+## CreateBookRequest (object)
+
+Request để tạo sách mới.
+
++ title: `Clean Code` (string, required) - Tiêu đề sách
++ author: `Robert C. Martin` (string, required) - Tác giả
++ published_year: 2008 (integer, required) - Năm xuất bản (minimum: 0)
+
+## UpdateBookRequest (object)
+
+Request để cập nhật thông tin sách.
+Ít nhất một trường phải được cung cấp.
+
++ title: `Clean Code (Updated)` (string, optional) - Tiêu đề sách
++ author: `Robert Martin` (string, optional) - Tác giả
++ published_year: 2009 (integer, optional) - Năm xuất bản (minimum: 0)
+
+## ErrorResponse (object)
+
+Response lỗi từ API.
+
++ message: `Book not found` (string, required) - Mô tả lỗi
+
+## DeleteResponse (object)
+
+Response từ request xóa sách.
+
++ message: `Book deleted` (string, required) - Thông báo
++ id: 1 (integer, required) - ID sách đã xóa

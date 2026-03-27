@@ -1,0 +1,239 @@
+openapi: 3.0.3
+info:
+  title: Book Management API
+  version: 1.0.0
+  description: |
+    API quản lý sách sử dụng OpenAPI 3.0.3 format.
+    - MIME Type: application/yaml hoặc application/json
+    - Support tool: Swagger UI, VS Code Extension, Postman
+servers:
+  - url: http://localhost:5000
+    description: Local development
+  - url: https://week4-smoky.vercel.app
+    description: Deployed API
+
+tags:
+  - name: Books
+    description: Các endpoint quản lý sách
+
+paths:
+  /api/books:
+    get:
+      tags: [Books]
+      summary: Lấy danh sách sách
+      description: Lấy toàn bộ sách hoặc tìm kiếm theo tên/tác giả qua query `q`.
+      parameters:
+        - $ref: '#/components/parameters/SearchQuery'
+      responses:
+        '200':
+          description: Danh sách sách
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Book'
+        '500':
+          description: Lỗi server
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags: [Books]
+      summary: Tạo sách mới
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBookRequest'
+      responses:
+        '201':
+          description: Tạo thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Book'
+        '400':
+          description: Dữ liệu đầu vào không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Lỗi server
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/books/{book_id}:
+    get:
+      tags: [Books]
+      summary: Lấy chi tiết sách
+      parameters:
+        - $ref: '#/components/parameters/BookId'
+      responses:
+        '200':
+          description: Thông tin sách
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Book'
+        '404':
+          description: Không tìm thấy sách
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Lỗi server
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      tags: [Books]
+      summary: Cập nhật thông tin sách
+      parameters:
+        - $ref: '#/components/parameters/BookId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateBookRequest'
+      responses:
+        '200':
+          description: Cập nhật thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Book'
+        '400':
+          description: Dữ liệu đầu vào không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Không tìm thấy sách
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Lỗi server
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags: [Books]
+      summary: Xóa sách
+      parameters:
+        - $ref: '#/components/parameters/BookId'
+      responses:
+        '200':
+          description: Xóa thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteResponse'
+        '404':
+          description: Không tìm thấy sách
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Lỗi server
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  parameters:
+    BookId:
+      name: book_id
+      in: path
+      required: true
+      description: ID của sách
+      schema:
+        type: integer
+        minimum: 1
+    SearchQuery:
+      name: q
+      in: query
+      required: false
+      description: Từ khóa tìm trong title hoặc author
+      schema:
+        type: string
+
+  schemas:
+    Book:
+      type: object
+      required: [id, title, author, published_year]
+      properties:
+        id:
+          type: integer
+          example: 1
+        title:
+          type: string
+          example: Clean Code
+        author:
+          type: string
+          example: Robert C. Martin
+        published_year:
+          type: integer
+          example: 2008
+
+    CreateBookRequest:
+      type: object
+      required: [title, author, published_year]
+      properties:
+        title:
+          type: string
+          example: Clean Code
+        author:
+          type: string
+          example: Robert C. Martin
+        published_year:
+          type: integer
+          minimum: 0
+          example: 2008
+
+    UpdateBookRequest:
+      type: object
+      minProperties: 1
+      properties:
+        title:
+          type: string
+        author:
+          type: string
+        published_year:
+          type: integer
+          minimum: 0
+
+    ErrorResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          example: Book not found
+
+    DeleteResponse:
+      type: object
+      required: [message, id]
+      properties:
+        message:
+          type: string
+          example: Book deleted
+        id:
+          type: integer
+          example: 1

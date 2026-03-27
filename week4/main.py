@@ -5,6 +5,54 @@ from flask import Flask, jsonify, request, send_file
 
 app = Flask(__name__)
 
+BASE_DIR = Path(__file__).parent
+DOC_FILES = {
+	"openapi": {
+		"file": BASE_DIR / "openapi-comparison" / "OpenAPI" / "openapi.yaml",
+		"mimetype": "application/yaml",
+	},
+	"raml": {
+		"file": BASE_DIR / "openapi-comparison" / "RAML" / "api.raml",
+		"mimetype": "application/yaml",
+	},
+	"api-blueprint": {
+		"file": BASE_DIR / "openapi-comparison" / "API_Blueprint" / "api.apib",
+		"mimetype": "text/plain",
+	},
+	"typespec": {
+		"file": BASE_DIR / "openapi-comparison" / "TypeSpec" / "api.tsp",
+		"mimetype": "text/plain",
+	},
+}
+
+DOC_ALIASES = {
+	"openapi": "openapi",
+	"open-api": "openapi",
+	"openapi.yaml": "openapi",
+	"openapi.yml": "openapi",
+	"raml": "raml",
+	"api.raml": "raml",
+	"api-blueprint": "api-blueprint",
+	"api_blueprint": "api-blueprint",
+	"apiblueprint": "api-blueprint",
+	"api.apib": "api-blueprint",
+	"api blueprint": "api-blueprint",
+	"typespec": "typespec",
+	"type-spec": "typespec",
+	"type_spec": "typespec",
+	"typesec": "typespec",
+	"api.tsp": "typespec",
+	"type spec": "typespec",
+}
+
+
+def normalize_doc_format(raw_value: str | None):
+	if not raw_value:
+		return None
+
+	cleaned = raw_value.strip().lower().replace("/", "").replace("\\", "")
+	return DOC_ALIASES.get(cleaned)
+
 
 books = [
 	{
@@ -121,6 +169,86 @@ def delete_book(book_id: int):
 def openapi_spec():
 	spec_path = Path(__file__).with_name("openapi.yaml")
 	return send_file(spec_path, mimetype="application/yaml")
+
+
+@app.get("/api-specs")
+def list_api_specs():
+	requested_format = request.args.get("format")
+	normalized = normalize_doc_format(requested_format)
+	if requested_format is not None:
+		if normalized is None:
+			return (
+				jsonify(
+					{
+						"message": "Invalid format. Supported: openapi, raml, api-blueprint, typespec",
+						"examples": [
+							"/api-specs/openapi",
+							"/api-specs/raml",
+							"/api-specs/api-blueprint",
+							"/api-specs/typespec",
+							"/api-specs?format=openapi.yaml",
+							"/api-specs?format=api.raml",
+							"/api-specs?format=api.apib",
+							"/api-specs?format=api.tsp",
+						],
+					}
+				),
+				404,
+			)
+
+		doc = DOC_FILES[normalized]
+		file_path = doc["file"]
+		if not file_path.exists():
+			return jsonify({"message": f"Document not found: {file_path.name}"}), 404
+
+		return send_file(file_path, mimetype=doc["mimetype"])
+
+	return jsonify(
+		{
+			"message": "Available API specification documents",
+			"docs": {
+				name: f"/api-specs/{name}"
+				for name in DOC_FILES
+			},
+			"query_examples": [
+				"/api-specs?format=openapi",
+				"/api-specs?format=raml",
+				"/api-specs?format=api-blueprint",
+				"/api-specs?format=typespec",
+				"/api-specs?format=openapi.yaml",
+				"/api-specs?format=api.raml",
+				"/api-specs?format=api.apib",
+				"/api-specs?format=api.tsp",
+			],
+		}
+	)
+
+
+@app.get("/api-specs/<string:doc_format>")
+def get_api_spec_file(doc_format: str):
+	normalized = normalize_doc_format(doc_format)
+	doc = DOC_FILES.get(normalized) if normalized else None
+	if doc is None:
+		return (
+			jsonify(
+				{
+					"message": "Invalid format. Supported: openapi, raml, api-blueprint, typespec",
+					"examples": [
+						"/api-specs/openapi",
+						"/api-specs/raml",
+						"/api-specs/api-blueprint",
+						"/api-specs/typespec",
+					],
+				}
+			),
+			404,
+		)
+
+	file_path = doc["file"]
+	if not file_path.exists():
+		return jsonify({"message": f"Document not found: {file_path.name}"}), 404
+
+	return send_file(file_path, mimetype=doc["mimetype"])
 
 
 @app.get("/docs")
