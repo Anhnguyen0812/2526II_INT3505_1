@@ -4,9 +4,17 @@ from datetime import datetime, timedelta, timezone
 from functools import wraps
 from typing import Any, Dict, List, Optional
 
+from dotenv import load_dotenv
+load_dotenv()
+
 import jwt
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, redirect
 from flasgger import Swagger, swag_from
+
+try:
+	from supabase import create_client, Client
+except ImportError:
+	Client = None
 
 
 app = Flask(__name__)
@@ -69,6 +77,12 @@ DATA = {
 
 REFRESH_STORE: Dict[str, Dict[str, Any]] = {}
 REVOKED_ACCESS_JTIS = set()
+
+SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip("'\" \r\n\t")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY", "").strip("'\" \r\n\t")
+supabase: Optional['Client'] = None
+if SUPABASE_URL and SUPABASE_KEY and Client is not None:
+	supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 
 def utc_now() -> datetime:
@@ -175,6 +189,7 @@ def index():
 				"POST /users",
 				"GET /security/audit",
 				"GET /auth/compare",
+				"POST /auth/verify-token"
 			],
 		}
 	)
@@ -495,6 +510,129 @@ def compare_jwt_vs_oauth2():
 			"note": "OAuth 2.0 can issue JWT access tokens, but they are different concepts.",
 		}
 	)
+
+
+@app.get("/auth/google")
+@swag_from({
+    "tags": ["OAuth2 (Supabase)"],
+    "responses": {
+        "302": {"description": "Redirects to Google OAuth authorization URL"},
+        "500": {"description": "Supabase not configured"}
+    }
+})
+def google_oauth_login():
+	"""Login with Google via Supabase OAuth2."""
+	if not supabase:
+		return jsonify({"message": "Please configure SUPABASE_URL and SUPABASE_KEY in environment variables."}), 500
+	
+	res = supabase.auth.sign_in_with_oauth({
+		"provider": "google",
+		"options": {
+			"redirect_to": "http://127.0.0.1:5000/auth/google/callback"
+		}
+	})
+	return redirect(res.url)
+
+
+@app.get("/auth/google/callback")
+@swag_from({
+    "tags": ["OAuth2 (Supabase)"],
+    "responses": {
+        "200": {"description": "OAuth callback documentation"}
+    }
+})
+def google_oauth_callback():
+	"""Handle Google OAuth2 callback from Supabase."""
+	code = request.args.get("code")
+	if code and supabase:
+		try:
+			# Đổi Authorization Code lấy Access Token (JWT)
+			res = supabase.auth.exchange_code_for_session({"auth_code": code})
+			access_token = res.session.access_token
+			
+			# Đọc Email từ session trả về
+			user_email = res.session.user.email if res.session.user else "Unknown"
+
+			# Giải mã access_token của Supabase
+			claims = jwt.decode(access_token, options={"verify_signature": False})
+			
+			# -- BƯỚC QUAN TRỌNG: TÍCH HỢP VÀO HỆ THỐNG HIỆN TẠI --
+			# Cấp luôn Access Token nội bộ (của ứng dụng mình - hệ thống bài lab) 
+			# cho User Google này (Cho họ role 'user', scope 'users:read')
+			local_access_token = issue_token(
+				username=user_email,
+				role="user",
+				scopes=["users:read"],
+				token_type="access",
+				expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRES_MIN),
+			)
+
+			return jsonify({
+				"message": "Đăng nhập Google thành công! Hệ thống đã cấp Local JWT.",
+				"google_email": user_email,
+				"supabase_token_info": claims,
+				"local_access_token": local_access_token
+			})
+		except Exception as e:
+			return jsonify({"message": "Lỗi khi đổi authorization code lấy token", "error": str(e)}), 400
+
+	return jsonify({
+		"message": "Vui lòng copy token trên URL và dùng endpoint /auth/verify-token để kiểm tra."
+	})
+
+@app.post("/auth/verify-token")
+@swag_from({
+    "tags": ["OAuth2 (Supabase)"],
+    "parameters": [{
+        "in": "body",
+        "name": "body",
+        "required": True,
+        "schema": {
+            "type": "object",
+            "required": ["access_token"],
+            "properties": {
+                "access_token": {"type": "string", "example": "eyJhbGciOiJIUzI1NiIsInR..."}
+            }
+        }
+    }],
+    "responses": {
+        "200": {"description": "Token hợp lệ"},
+        "401": {"description": "Token không hợp lệ"}
+    }
+})
+def verify_input_token():
+	"""Endpoint để bạn dán Token Supabase (hoặc JWT bất kỳ) vào để Backend kiểm tra."""
+	body = request.get_json(silent=True) or {}
+	token = body.get("access_token")
+	if not token:
+		return jsonify({"message": "Vui lòng truyền access_token"}), 400
+	
+	import re
+	# Hỗ trợ bóc tách nếu user dán nguyên cả cụm URL fragment (vd: #access_token=abc.xyz...)
+	match = re.search(r'access_token=([^&]+)', token)
+	if match:
+		token = match.group(1)
+
+	# Xoá khoảng trắng thừa
+	token = token.strip()
+	
+	# Kiểm tra xem đây có phải là JWT không (đặc trưng là có 3 đoạn qua dấu chấm)
+	if "." not in token:
+		return jsonify({
+			"message": "Chuỗi bạn dán vào dường như là Authorization Code (ví dụ: a3250abe-...), KHÔNG phải JWT Access Token. Backend cần một Access Token bắt đầu bằng 'eyJ...'",
+			"error": "Not enough segments"
+		}), 400
+	
+	try:
+		# Giải mã không bận tâm JWT_SECRET của bài học (hoặc có thể dùng jwt.decode verify=False để xem ruột token)
+		claims = jwt.decode(token, options={"verify_signature": False})
+		return jsonify({
+			"message": "Trích xuất Token thành công!",
+			"is_supabase_token": claims.get("iss") != None and "supabase" in claims.get("iss", ""),
+			"claims": claims
+		})
+	except Exception as e:
+		return jsonify({"message": "Token không hợp lệ", "error": str(e)}), 401
 
 
 if __name__ == "__main__":
