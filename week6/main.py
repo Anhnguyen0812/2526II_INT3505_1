@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 
 import jwt
 from flask import Flask, jsonify, request
-from flasgger import Swagger
+from flasgger import Swagger, swag_from
 
 
 app = Flask(__name__)
@@ -158,6 +158,10 @@ def auth_required(required_scopes: Optional[List[str]] = None, required_roles: O
 
 
 @app.get("/")
+@swag_from({
+    "tags": ["General"],
+    "responses": {"200": {"description": "API Overview"}}
+})
 def index():
 	return jsonify(
 		{
@@ -177,6 +181,26 @@ def index():
 
 
 @app.post("/auth/login")
+@swag_from({
+    "tags": ["Auth"],
+    "parameters": [{
+        "in": "body",
+        "name": "body",
+        "required": True,
+        "schema": {
+            "type": "object",
+            "required": ["username", "password"],
+            "properties": {
+                "username": {"type": "string", "example": "admin"},
+                "password": {"type": "string", "example": "admin123"}
+            }
+        }
+    }],
+    "responses": {
+        "200": {"description": "Tokens issued"},
+        "401": {"description": "Invalid credentials"}
+    }
+})
 def login():
 	"""Login endpoint: returns access token and refresh token."""
 	body = request.get_json(silent=True) or {}
@@ -222,6 +246,25 @@ def login():
 
 
 @app.post("/auth/refresh")
+@swag_from({
+    "tags": ["Auth"],
+    "parameters": [{
+        "in": "body",
+        "name": "body",
+        "required": True,
+        "schema": {
+            "type": "object",
+            "required": ["refresh_token"],
+            "properties": {
+                "refresh_token": {"type": "string"}
+            }
+        }
+    }],
+    "responses": {
+        "200": {"description": "New tokens issued"},
+        "401": {"description": "Invalid/expired refresh token"}
+    }
+})
 def refresh():
 	"""Refresh endpoint: rotates refresh token and issues new tokens."""
 	body = request.get_json(silent=True) or {}
@@ -288,6 +331,14 @@ def refresh():
 
 @app.post("/auth/logout")
 @auth_required()
+@swag_from({
+    "tags": ["Auth"],
+    "security": [{"Bearer": []}],
+    "responses": {
+        "200": {"description": "Logged out"},
+        "401": {"description": "Unauthorized"}
+    }
+})
 def logout():
 	"""Logout endpoint: revokes current access token via denylist."""
 	claims = request.jwt_claims  # type: ignore[attr-defined]
@@ -297,6 +348,14 @@ def logout():
 
 @app.get("/users")
 @auth_required(required_scopes=["users:read"])
+@swag_from({
+    "tags": ["Users"],
+    "security": [{"Bearer": []}],
+    "responses": {
+        "200": {"description": "User list"},
+        "403": {"description": "Missing scope"}
+    }
+})
 def list_users():
 	"""Protected endpoint: list users; requires users:read scope."""
 	return jsonify(DATA["users"])
@@ -304,6 +363,28 @@ def list_users():
 
 @app.post("/users")
 @auth_required(required_scopes=["users:write"], required_roles=["admin"])
+@swag_from({
+    "tags": ["Users"],
+    "security": [{"Bearer": []}],
+    "parameters": [{
+        "in": "body",
+        "name": "body",
+        "required": True,
+        "schema": {
+            "type": "object",
+            "required": ["name", "email"],
+            "properties": {
+                "name": {"type": "string"},
+                "email": {"type": "string"}
+            }
+        }
+    }],
+    "responses": {
+        "201": {"description": "User created"},
+        "400": {"description": "Missing parameters"},
+        "403": {"description": "Missing scope or role"}
+    }
+})
 def create_user():
 	"""Protected endpoint: create user; requires admin role and users:write scope."""
 	body = request.get_json(silent=True) or {}
@@ -319,6 +400,14 @@ def create_user():
 
 @app.get("/security/audit")
 @auth_required(required_scopes=["audit:read"], required_roles=["admin"])
+@swag_from({
+    "tags": ["Security"],
+    "security": [{"Bearer": []}],
+    "responses": {
+        "200": {"description": "Audit report"},
+        "403": {"description": "Missing scope or role"}
+    }
+})
 def security_audit():
 	"""Protected endpoint: returns security audit findings and mitigations."""
 	findings = []
@@ -385,6 +474,12 @@ def security_audit():
 
 
 @app.get("/auth/compare")
+@swag_from({
+    "tags": ["Auth"],
+    "responses": {
+        "200": {"description": "Comparison data"}
+    }
+})
 def compare_jwt_vs_oauth2():
 	"""Returns a quick JWT vs OAuth 2.0 comparison."""
 	return jsonify(
