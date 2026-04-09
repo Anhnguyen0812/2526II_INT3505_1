@@ -127,6 +127,9 @@ def decode_token(token: str) -> Dict[str, Any]:
 def extract_bearer_token() -> Optional[str]:
 	auth_header = request.headers.get("Authorization", "")
 	if not auth_header.startswith("Bearer "):
+		# Thử sửa lại nếu người dùng nhập dán trực tiếp JWT vào Swagger thay vì ghi chữ Bearer
+		if auth_header and len(auth_header.split(".")) == 3:
+			return auth_header.strip()
 		return None
 	return auth_header.split(" ", 1)[1].strip()
 
@@ -366,14 +369,64 @@ def logout():
 @swag_from({
     "tags": ["Users"],
     "security": [{"Bearer": []}],
+    "parameters": [
+        {
+            "in": "query",
+            "name": "limit",
+            "type": "integer",
+            "description": "Số lượng bản ghi trả về",
+            "default": 10
+        },
+        {
+            "in": "query",
+            "name": "cursor",
+            "type": "string",
+            "description": "Cursor để lấy trang tiếp theo (Base64 encoded ID)"
+        }
+    ],
     "responses": {
         "200": {"description": "User list"},
+        "400": {"description": "Invalid cursor"},
         "403": {"description": "Missing scope"}
     }
 })
 def list_users():
-	"""Protected endpoint: list users; requires users:read scope."""
-	return jsonify(DATA["users"])
+	"""Protected endpoint: list users; requires users:read scope. Implements cursor-based pagination."""
+	try:
+		limit = int(request.args.get("limit", 10))
+		if limit <= 0: limit = 10
+	except ValueError:
+		limit = 10
+
+	cursor = request.args.get("cursor")
+	cursor_id = None
+	if cursor:
+		try:
+			import base64
+			cursor_id = int(base64.b64decode(cursor).decode())
+		except Exception:
+			return jsonify({"message": "Invalid cursor format"}), 400
+
+	# Đảm bảo danh sách được sắp xếp theo ID tăng dần
+	sorted_users = sorted(DATA["users"], key=lambda x: x["id"])
+	
+	# Lọc các user có ID > cursor_id
+	if cursor_id is not None:
+		sorted_users = [u for u in sorted_users if u["id"] > cursor_id]
+
+	paginated_users = sorted_users[:limit]
+	
+	next_cursor = None
+	if len(sorted_users) > limit:
+		import base64
+		last_id = paginated_users[-1]["id"]
+		next_cursor = base64.b64encode(str(last_id).encode()).decode()
+
+	return jsonify({
+		"data": paginated_users,
+		"next_cursor": next_cursor,
+		"limit": limit
+	})
 
 
 @app.post("/users")
