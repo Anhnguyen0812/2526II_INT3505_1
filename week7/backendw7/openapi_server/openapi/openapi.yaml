@@ -1,0 +1,709 @@
+openapi: 3.0.3
+info:
+  description: |
+    OpenAPI specification for Product CRUD.
+    This API is designed for a MongoDB backend where product IDs are ObjectId strings.
+  title: Product API
+  version: 1.0.0
+servers:
+- description: Local development server
+  url: http://localhost:3000/api/v1
+tags:
+- description: Manage product resources
+  name: Products
+paths:
+  /products:
+    get:
+      operationId: list_products
+      parameters:
+      - description: Page number
+        explode: true
+        in: query
+        name: page
+        required: false
+        schema:
+          default: 1
+          minimum: 1
+          type: integer
+        style: form
+      - description: Number of items per page
+        explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          default: 10
+          maximum: 100
+          minimum: 1
+          type: integer
+        style: form
+      - description: Search by product name (contains)
+        explode: true
+        in: query
+        name: search
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Filter by category
+        explode: true
+        in: query
+        name: category
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Minimum product price
+        explode: true
+        in: query
+        name: minPrice
+        required: false
+        schema:
+          format: float
+          minimum: 0
+          type: number
+        style: form
+      - description: Maximum product price
+        explode: true
+        in: query
+        name: maxPrice
+        required: false
+        schema:
+          format: float
+          minimum: 0
+          type: number
+        style: form
+      - description: Field to sort by
+        explode: true
+        in: query
+        name: sortBy
+        required: false
+        schema:
+          default: createdAt
+          enum:
+          - name
+          - price
+          - stock
+          - createdAt
+          - updatedAt
+          type: string
+        style: form
+      - description: Sort direction
+        explode: true
+        in: query
+        name: sortOrder
+        required: false
+        schema:
+          default: desc
+          enum:
+          - asc
+          - desc
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              examples:
+                sample:
+                  value:
+                    data:
+                    - _id: 6613d7d94af0df2a8e9ed201
+                      name: Wireless Mouse
+                      description: 2.4GHz ergonomic mouse
+                      price: 19.99
+                      stock: 50
+                      category: Accessories
+                      isActive: true
+                      tags:
+                      - mouse
+                      - wireless
+                      createdAt: 2026-04-09T08:10:00.000Z
+                      updatedAt: 2026-04-09T08:10:00.000Z
+                    pagination:
+                      page: 1
+                      limit: 10
+                      totalItems: 1
+                      totalPages: 1
+              schema:
+                $ref: "#/components/schemas/ProductListResponse"
+          description: Product list retrieved successfully
+        "400":
+          content:
+            application/json:
+              examples:
+                invalid_id:
+                  value:
+                    message: Validation failed
+                    code: BAD_REQUEST
+                    details:
+                      productId: Must be a valid 24-hex MongoDB ObjectId
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Bad request
+      summary: List products
+      tags:
+      - Products
+      x-openapi-router-controller: openapi_server.controllers.products_controller
+    post:
+      operationId: create_product
+      requestBody:
+        content:
+          application/json:
+            examples:
+              sample:
+                value:
+                  name: Mechanical Keyboard
+                  description: Hot-swappable keyboard
+                  price: 89.5
+                  stock: 30
+                  category: Peripherals
+                  isActive: true
+                  tags:
+                  - keyboard
+                  - mechanical
+            schema:
+              $ref: "#/components/schemas/ProductCreateRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+          description: Product created successfully
+        "400":
+          content:
+            application/json:
+              examples:
+                invalid_id:
+                  value:
+                    message: Validation failed
+                    code: BAD_REQUEST
+                    details:
+                      productId: Must be a valid 24-hex MongoDB ObjectId
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Bad request
+      summary: Create a product
+      tags:
+      - Products
+      x-openapi-router-controller: openapi_server.controllers.products_controller
+  /products/{productId}:
+    delete:
+      operationId: delete_product_by_id
+      parameters:
+      - description: MongoDB ObjectId of the product
+        explode: false
+        in: path
+        name: productId
+        required: true
+        schema:
+          pattern: "^[a-fA-F0-9]{24}$"
+          type: string
+        style: simple
+      responses:
+        "204":
+          description: Product deleted successfully
+        "400":
+          content:
+            application/json:
+              examples:
+                invalid_id:
+                  value:
+                    message: Validation failed
+                    code: BAD_REQUEST
+                    details:
+                      productId: Must be a valid 24-hex MongoDB ObjectId
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Bad request
+        "404":
+          content:
+            application/json:
+              examples:
+                product_not_found:
+                  value:
+                    message: Product not found
+                    code: NOT_FOUND
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Resource not found
+      summary: Delete product by ID
+      tags:
+      - Products
+      x-openapi-router-controller: openapi_server.controllers.products_controller
+    get:
+      operationId: get_product_by_id
+      parameters:
+      - description: MongoDB ObjectId of the product
+        explode: false
+        in: path
+        name: productId
+        required: true
+        schema:
+          pattern: "^[a-fA-F0-9]{24}$"
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+          description: Product retrieved successfully
+        "400":
+          content:
+            application/json:
+              examples:
+                invalid_id:
+                  value:
+                    message: Validation failed
+                    code: BAD_REQUEST
+                    details:
+                      productId: Must be a valid 24-hex MongoDB ObjectId
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Bad request
+        "404":
+          content:
+            application/json:
+              examples:
+                product_not_found:
+                  value:
+                    message: Product not found
+                    code: NOT_FOUND
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Resource not found
+      summary: Get product by ID
+      tags:
+      - Products
+      x-openapi-router-controller: openapi_server.controllers.products_controller
+    patch:
+      operationId: update_product_by_id
+      parameters:
+      - description: MongoDB ObjectId of the product
+        explode: false
+        in: path
+        name: productId
+        required: true
+        schema:
+          pattern: "^[a-fA-F0-9]{24}$"
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductUpdateRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+          description: Product updated successfully
+        "400":
+          content:
+            application/json:
+              examples:
+                invalid_id:
+                  value:
+                    message: Validation failed
+                    code: BAD_REQUEST
+                    details:
+                      productId: Must be a valid 24-hex MongoDB ObjectId
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Bad request
+        "404":
+          content:
+            application/json:
+              examples:
+                product_not_found:
+                  value:
+                    message: Product not found
+                    code: NOT_FOUND
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Resource not found
+      summary: Update product by ID (partial)
+      tags:
+      - Products
+      x-openapi-router-controller: openapi_server.controllers.products_controller
+    put:
+      operationId: replace_product_by_id
+      parameters:
+      - description: MongoDB ObjectId of the product
+        explode: false
+        in: path
+        name: productId
+        required: true
+        schema:
+          pattern: "^[a-fA-F0-9]{24}$"
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductCreateRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+          description: Product replaced successfully
+        "400":
+          content:
+            application/json:
+              examples:
+                invalid_id:
+                  value:
+                    message: Validation failed
+                    code: BAD_REQUEST
+                    details:
+                      productId: Must be a valid 24-hex MongoDB ObjectId
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Bad request
+        "404":
+          content:
+            application/json:
+              examples:
+                product_not_found:
+                  value:
+                    message: Product not found
+                    code: NOT_FOUND
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Resource not found
+      summary: Replace product by ID
+      tags:
+      - Products
+      x-openapi-router-controller: openapi_server.controllers.products_controller
+components:
+  responses:
+    BadRequest:
+      content:
+        application/json:
+          examples:
+            invalid_id:
+              value:
+                message: Validation failed
+                code: BAD_REQUEST
+                details:
+                  productId: Must be a valid 24-hex MongoDB ObjectId
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+      description: Bad request
+    NotFound:
+      content:
+        application/json:
+          examples:
+            product_not_found:
+              value:
+                message: Product not found
+                code: NOT_FOUND
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+      description: Resource not found
+  schemas:
+    Product:
+      example:
+        createdAt: 2000-01-23T04:56:07.000+00:00
+        price: 0.08008282
+        name: name
+        description: description
+        _id: _id
+        stock: 0
+        category: category
+        isActive: true
+        tags:
+        - tags
+        - tags
+        - tags
+        - tags
+        - tags
+        updatedAt: 2000-01-23T04:56:07.000+00:00
+      properties:
+        _id:
+          description: MongoDB ObjectId
+          pattern: "^[a-fA-F0-9]{24}$"
+          title: _id
+          type: string
+        name:
+          maxLength: 120
+          minLength: 1
+          title: name
+          type: string
+        description:
+          maxLength: 2000
+          title: description
+          type: string
+        price:
+          format: float
+          minimum: 0
+          title: price
+          type: number
+        stock:
+          minimum: 0
+          title: stock
+          type: integer
+        category:
+          maxLength: 80
+          minLength: 1
+          title: category
+          type: string
+        isActive:
+          default: true
+          title: isActive
+          type: boolean
+        tags:
+          items:
+            maxLength: 40
+            minLength: 1
+            type: string
+          maxItems: 30
+          title: tags
+          type: array
+        createdAt:
+          format: date-time
+          title: createdAt
+          type: string
+        updatedAt:
+          format: date-time
+          title: updatedAt
+          type: string
+      required:
+      - _id
+      - category
+      - createdAt
+      - isActive
+      - name
+      - price
+      - stock
+      - updatedAt
+      title: Product
+      type: object
+    ProductCreateRequest:
+      additionalProperties: false
+      example:
+        price: 0.08008282
+        name: name
+        description: description
+        stock: 0
+        category: category
+        isActive: true
+        tags:
+        - tags
+        - tags
+        - tags
+        - tags
+        - tags
+      properties:
+        name:
+          maxLength: 120
+          minLength: 1
+          title: name
+          type: string
+        description:
+          maxLength: 2000
+          title: description
+          type: string
+        price:
+          format: float
+          minimum: 0
+          title: price
+          type: number
+        stock:
+          minimum: 0
+          title: stock
+          type: integer
+        category:
+          maxLength: 80
+          minLength: 1
+          title: category
+          type: string
+        isActive:
+          default: true
+          title: isActive
+          type: boolean
+        tags:
+          items:
+            maxLength: 40
+            minLength: 1
+            type: string
+          maxItems: 30
+          title: tags
+          type: array
+      required:
+      - category
+      - name
+      - price
+      - stock
+      title: ProductCreateRequest
+      type: object
+    ProductUpdateRequest:
+      additionalProperties: false
+      example:
+        price: 0.08008282
+        name: name
+        description: description
+        stock: 0
+        category: category
+        isActive: true
+        tags:
+        - tags
+        - tags
+        - tags
+        - tags
+        - tags
+      properties:
+        name:
+          maxLength: 120
+          minLength: 1
+          title: name
+          type: string
+        description:
+          maxLength: 2000
+          title: description
+          type: string
+        price:
+          format: float
+          minimum: 0
+          title: price
+          type: number
+        stock:
+          minimum: 0
+          title: stock
+          type: integer
+        category:
+          maxLength: 80
+          minLength: 1
+          title: category
+          type: string
+        isActive:
+          title: isActive
+          type: boolean
+        tags:
+          items:
+            maxLength: 40
+            minLength: 1
+            type: string
+          maxItems: 30
+          title: tags
+          type: array
+      title: ProductUpdateRequest
+      type: object
+    ProductListResponse:
+      example:
+        pagination:
+          totalItems: 0
+          limit: 1
+          totalPages: 0
+          page: 1
+        data:
+        - createdAt: 2000-01-23T04:56:07.000+00:00
+          price: 0.08008282
+          name: name
+          description: description
+          _id: _id
+          stock: 0
+          category: category
+          isActive: true
+          tags:
+          - tags
+          - tags
+          - tags
+          - tags
+          - tags
+          updatedAt: 2000-01-23T04:56:07.000+00:00
+        - createdAt: 2000-01-23T04:56:07.000+00:00
+          price: 0.08008282
+          name: name
+          description: description
+          _id: _id
+          stock: 0
+          category: category
+          isActive: true
+          tags:
+          - tags
+          - tags
+          - tags
+          - tags
+          - tags
+          updatedAt: 2000-01-23T04:56:07.000+00:00
+      properties:
+        data:
+          items:
+            $ref: "#/components/schemas/Product"
+          title: data
+          type: array
+        pagination:
+          $ref: "#/components/schemas/ProductListResponse_pagination"
+      required:
+      - data
+      - pagination
+      title: ProductListResponse
+      type: object
+    ErrorResponse:
+      example:
+        code: code
+        details:
+          key: ""
+        message: message
+      properties:
+        message:
+          title: message
+          type: string
+        code:
+          title: code
+          type: string
+        details:
+          additionalProperties: true
+          title: details
+          type: object
+      required:
+      - message
+      title: ErrorResponse
+      type: object
+    ProductListResponse_pagination:
+      example:
+        totalItems: 0
+        limit: 1
+        totalPages: 0
+        page: 1
+      properties:
+        page:
+          minimum: 1
+          title: page
+          type: integer
+        limit:
+          minimum: 1
+          title: limit
+          type: integer
+        totalItems:
+          minimum: 0
+          title: totalItems
+          type: integer
+        totalPages:
+          minimum: 0
+          title: totalPages
+          type: integer
+      required:
+      - limit
+      - page
+      - totalItems
+      - totalPages
+      title: ProductListResponse_pagination
+      type: object
+x-database:
+  provider: mongodb
+  notes:
+  - Product _id fields follow MongoDB ObjectId format
+  - Query filters are designed for document-based search
