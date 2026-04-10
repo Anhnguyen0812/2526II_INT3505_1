@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+from bisect import bisect_right
 from dataclasses import asdict, dataclass
 from datetime import date
+from itertools import islice
+from statistics import mean
+from time import perf_counter
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from flask import Flask, jsonify, request
@@ -131,6 +135,68 @@ CREATE_MEMBER_LOAN_DOC = {
 		400: {"description": "Invalid request body"},
 		404: {"description": "Member or book not found"},
 		409: {"description": "Book unavailable"},
+	},
+}
+
+BENCHMARK_PAGINATION_DOC = {
+	"tags": ["Benchmark"],
+	"parameters": [
+		{
+			"in": "query",
+			"name": "total_records",
+			"schema": {"type": "integer", "minimum": 10000, "maximum": 2000000, "default": 1000000},
+			"description": "Number of records used for simulation",
+		},
+		{
+			"in": "query",
+			"name": "limit",
+			"schema": {"type": "integer", "minimum": 1, "maximum": 1000, "default": 20},
+			"description": "Page size",
+		},
+		{
+			"in": "query",
+			"name": "runs",
+			"schema": {"type": "integer", "minimum": 1, "maximum": 30, "default": 5},
+			"description": "How many runs per position for averaging",
+		},
+	],
+	"responses": {
+		200: {"description": "Benchmark result for cursor, page, and limit-offset"},
+		400: {"description": "Invalid query parameters"},
+	},
+}
+
+BENCHMARK_SEGMENT_DOC = {
+	"tags": ["Benchmark"],
+	"parameters": [
+		{
+			"in": "query",
+			"name": "position",
+			"schema": {"type": "integer", "minimum": 0, "default": 500000},
+			"description": "0-based segment start position",
+		},
+		{
+			"in": "query",
+			"name": "limit",
+			"schema": {"type": "integer", "minimum": 1, "maximum": 1000, "default": 20},
+			"description": "Segment size",
+		},
+		{
+			"in": "query",
+			"name": "total_records",
+			"schema": {"type": "integer", "minimum": 10000, "maximum": 2000000, "default": 1000000},
+			"description": "Number of records used for simulation",
+		},
+		{
+			"in": "query",
+			"name": "runs",
+			"schema": {"type": "integer", "minimum": 1, "maximum": 30, "default": 5},
+			"description": "How many runs for average time",
+		},
+	],
+	"responses": {
+		200: {"description": "Compare speed for one arbitrary data segment"},
+		400: {"description": "Invalid query parameters"},
 	},
 }
 
@@ -337,6 +403,110 @@ def paginate_cursor(items: Sequence[Any], cursor: Optional[int], limit: int, key
 	}
 
 
+def _simulate_offset_query(records: Sequence[int], offset: int, limit: int) -> List[int]:
+	# Simulate DB cost for OFFSET by iterating/skipping rows before collecting page data.
+	return list(islice(iter(records), offset, offset + limit))
+
+
+def _simulate_page_query(records: Sequence[int], page: int, per_page: int) -> List[int]:
+	offset = (page - 1) * per_page
+	return _simulate_offset_query(records, offset, per_page)
+
+
+def _simulate_cursor_query(records: Sequence[int], cursor: Optional[int], limit: int) -> List[int]:
+	start = 0 if cursor is None else bisect_right(records, cursor)
+	return list(records[start : start + limit])
+
+
+def _avg_runtime_ms(fn: Callable[[], Any], runs: int) -> float:
+	timings: List[float] = []
+	for _ in range(runs):
+		start = perf_counter()
+		fn()
+		timings.append((perf_counter() - start) * 1000.0)
+	return round(mean(timings), 4)
+
+
+def benchmark_pagination_strategies(total_records: int = 1_000_000, limit: int = 20, runs: int = 5) -> Dict[str, Any]:
+	records = list(range(1, total_records + 1))
+	positions = [0, 1_000, 10_000, 100_000, 500_000, 900_000, max(total_records - limit, 0)]
+
+	results: List[Dict[str, Any]] = []
+	for offset in positions:
+		offset = min(offset, max(total_records - limit, 0))
+		page = (offset // limit) + 1
+		cursor = offset if offset > 0 else None
+
+		offset_ms = _avg_runtime_ms(lambda: _simulate_offset_query(records, offset, limit), runs)
+		page_ms = _avg_runtime_ms(lambda: _simulate_page_query(records, page, limit), runs)
+		cursor_ms = _avg_runtime_ms(lambda: _simulate_cursor_query(records, cursor, limit), runs)
+
+		results.append(
+			{
+				"offset": offset,
+				"page": page,
+				"cursor": cursor,
+				"offset_ms": offset_ms,
+				"page_ms": page_ms,
+				"cursor_ms": cursor_ms,
+				"offset_vs_cursor_ratio": round((offset_ms / cursor_ms), 2) if cursor_ms > 0 else None,
+				"page_vs_cursor_ratio": round((page_ms / cursor_ms), 2) if cursor_ms > 0 else None,
+			}
+		)
+
+	return {
+		"config": {
+			"total_records": total_records,
+			"limit": limit,
+			"runs_per_position": runs,
+		},
+		"results": results,
+		"summary": {
+			"avg_offset_ms": round(mean([r["offset_ms"] for r in results]), 4),
+			"avg_page_ms": round(mean([r["page_ms"] for r in results]), 4),
+			"avg_cursor_ms": round(mean([r["cursor_ms"] for r in results]), 4),
+		},
+	}
+
+
+def benchmark_single_segment(position: int, total_records: int = 1_000_000, limit: int = 20, runs: int = 5) -> Dict[str, Any]:
+	records = list(range(1, total_records + 1))
+	max_start = max(total_records - limit, 0)
+	start = min(position, max_start)
+	page = (start // limit) + 1
+	cursor = start if start > 0 else None
+
+	offset_data = _simulate_offset_query(records, start, limit)
+	page_data = _simulate_page_query(records, page, limit)
+	cursor_data = _simulate_cursor_query(records, cursor, limit)
+
+	offset_ms = _avg_runtime_ms(lambda: _simulate_offset_query(records, start, limit), runs)
+	page_ms = _avg_runtime_ms(lambda: _simulate_page_query(records, page, limit), runs)
+	cursor_ms = _avg_runtime_ms(lambda: _simulate_cursor_query(records, cursor, limit), runs)
+
+	return {
+		"config": {
+			"position": position,
+			"normalized_position": start,
+			"total_records": total_records,
+			"limit": limit,
+			"runs": runs,
+		},
+		"timing_ms": {
+			"offset": offset_ms,
+			"page": page_ms,
+			"cursor": cursor_ms,
+			"offset_vs_cursor_ratio": round((offset_ms / cursor_ms), 2) if cursor_ms > 0 else None,
+			"page_vs_cursor_ratio": round((page_ms / cursor_ms), 2) if cursor_ms > 0 else None,
+		},
+		"segment": {
+			"offset": {"offset": start, "ids": offset_data},
+			"page": {"page": page, "ids": page_data},
+			"cursor": {"cursor": cursor, "ids": cursor_data},
+		},
+	}
+
+
 @app.get("/health")
 @swag_from(HEALTH_DOC)
 def health_check() -> Any:
@@ -508,6 +678,54 @@ def create_member_loan(member_id: int) -> Any:
 	book.available_copies -= 1
 
 	return jsonify({"message": "Loan created.", "data": serialize_loan(new_loan)}), 201
+
+
+@app.get("/benchmarks/pagination")
+@swag_from(BENCHMARK_PAGINATION_DOC)
+def benchmark_pagination() -> Any:
+	"""
+	Simulate performance comparison for 1,000,000 records between cursor, page, and limit-offset.
+	Example: /benchmarks/pagination?total_records=1000000&limit=20&runs=5
+	"""
+	total_records, error = get_int_query_param("total_records", default=1_000_000, min_value=10_000, max_value=2_000_000)
+	if error:
+		return jsonify(error[0]), error[1]
+
+	limit, error = get_int_query_param("limit", default=20, min_value=1, max_value=1_000)
+	if error:
+		return jsonify(error[0]), error[1]
+
+	runs, error = get_int_query_param("runs", default=5, min_value=1, max_value=30)
+	if error:
+		return jsonify(error[0]), error[1]
+
+	return jsonify(benchmark_pagination_strategies(total_records=total_records, limit=limit, runs=runs))
+
+
+@app.get("/benchmarks/pagination/segment")
+@swag_from(BENCHMARK_SEGMENT_DOC)
+def benchmark_pagination_segment() -> Any:
+	"""
+	Get one arbitrary data segment and compare speed of offset, page and cursor.
+	Example: /benchmarks/pagination/segment?position=700000&limit=20&total_records=1000000&runs=5
+	"""
+	position, error = get_int_query_param("position", default=500_000, min_value=0, max_value=2_000_000)
+	if error:
+		return jsonify(error[0]), error[1]
+
+	total_records, error = get_int_query_param("total_records", default=1_000_000, min_value=10_000, max_value=2_000_000)
+	if error:
+		return jsonify(error[0]), error[1]
+
+	limit, error = get_int_query_param("limit", default=20, min_value=1, max_value=1_000)
+	if error:
+		return jsonify(error[0]), error[1]
+
+	runs, error = get_int_query_param("runs", default=5, min_value=1, max_value=30)
+	if error:
+		return jsonify(error[0]), error[1]
+
+	return jsonify(benchmark_single_segment(position=position, total_records=total_records, limit=limit, runs=runs))
 
 
 if __name__ == "__main__":
