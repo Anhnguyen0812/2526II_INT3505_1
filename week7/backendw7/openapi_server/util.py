@@ -88,6 +88,12 @@ def deserialize_datetime(string):
     """
     if string is None:
       return None
+
+    if isinstance(string, datetime.datetime):
+        return string
+
+    if isinstance(string, datetime.date):
+        return datetime.datetime.combine(string, datetime.time())
     
     try:
         from dateutil.parser import parse

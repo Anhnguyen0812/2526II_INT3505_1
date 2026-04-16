@@ -64,3 +64,8 @@ target/
 
 # Ipython Notebook
 .ipynb_checkpoints
+
+# Local environment variables
+.env
+.env.*
+!.env.example

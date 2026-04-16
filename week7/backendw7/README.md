@@ -18,6 +18,44 @@ pip3 install -r requirements.txt
 python3 -m openapi_server
 ```
 
+Before running, set MongoDB connection settings:
+
+Preferred way: use a local .env file (auto-loaded by the app).
+
+1. Copy `.env.example` to `.env`
+2. Fill your MongoDB settings in `.env`
+
+Example `.env`:
+
+```env
+MONGODB_URI=mongodb://localhost:27017
+MONGODB_DB=product_api
+```
+
+Alternative: set environment variables directly in terminal.
+
+```bash
+export MONGODB_URI="mongodb://localhost:27017"
+export MONGODB_DB="product_api"
+```
+
+On Windows PowerShell:
+
+```powershell
+$env:MONGODB_URI="mongodb://localhost:27017"
+$env:MONGODB_DB="product_api"
+```
+
+Create collection `products` in MongoDB (it is auto-created on first insert). Optional indexes:
+
+```javascript
+use product_api
+db.products.createIndex({ name: 1 })
+db.products.createIndex({ category: 1 })
+db.products.createIndex({ price: 1 })
+db.products.createIndex({ created_at: 1 })
+```
+
 and open your browser to here:
 
 ```

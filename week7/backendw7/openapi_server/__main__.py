@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 
 import connexion
+from dotenv import load_dotenv
 
 from openapi_server import encoder
 
 
 def main():
+    load_dotenv()
     app = connexion.App(__name__, specification_dir='./openapi/')
     app.app.json_encoder = encoder.JSONEncoder
     app.add_api('openapi.yaml',
