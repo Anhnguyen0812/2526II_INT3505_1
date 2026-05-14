@@ -1,0 +1,4 @@
+flask
+flasgger
+prometheus-client
+flask-limiter
