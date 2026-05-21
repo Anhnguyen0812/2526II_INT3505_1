@@ -24,6 +24,7 @@ Swagger(app)
 ARTICLES: Dict[int, Dict[str, str]] = {}
 SUBSCRIPTIONS: Dict[str, Dict[str, object]] = {}
 SEEN_EVENT_IDS: List[str] = []
+RECEIVED_NOTIFICATIONS: List[Dict[str, object]] = []
 NEXT_ARTICLE_ID = 1
 
 SUPPORTED_EVENTS = {
@@ -59,7 +60,7 @@ def sign_payload(secret: str, body: bytes, timestamp: str) -> str:
     return hmac.new(secret.encode("utf-8"), message, hashlib.sha256).hexdigest()
 
 
-def send_webhook(event_type: str, payload: Dict[str, object]) -> None:
+def send_webhook(event_type: str, payload: Dict[str, object], tamper: bool = False, duplicate: bool = False) -> None:
     event_id = str(uuid.uuid4())
     payload_with_meta = {
         "id": event_id,
@@ -73,21 +74,31 @@ def send_webhook(event_type: str, payload: Dict[str, object]) -> None:
         if event_type not in sub["events"]:
             continue
         timestamp = str(int(time.time()))
-        signature = sign_payload(sub["secret"], body, timestamp)
+        # For security simulation: sign with incorrect key if tamper is True
+        signing_secret = "invalid-secret-tampered" if tamper else sub["secret"]
+        signature = sign_payload(signing_secret, body, timestamp)
         headers = {
             "Content-Type": "application/json",
             "X-Webhook-Id": event_id,
             "X-Webhook-Timestamp": timestamp,
             "X-Webhook-Signature": signature,
+            "X-Subscription-Id": sub["id"],
         }
-        for attempt in range(1, 4):
-            try:
-                resp = requests.post(sub["url"], data=body, headers=headers, timeout=3)
-                if 200 <= resp.status_code < 300:
-                    break
-            except requests.RequestException:
-                pass
-            time.sleep(0.5 * attempt)
+        
+        def dispatch() -> None:
+            for attempt in range(1, 4):
+                try:
+                    resp = requests.post(sub["url"], data=body, headers=headers, timeout=3)
+                    if 200 <= resp.status_code < 300:
+                        break
+                except requests.RequestException:
+                    pass
+                time.sleep(0.1 * attempt)
+        
+        dispatch()
+        if duplicate:
+            # Send duplicate payload to test idempotency
+            dispatch()
 
 
 @app.get("/health")
@@ -202,7 +213,10 @@ def create_article() -> Response:
     ARTICLES[NEXT_ARTICLE_ID] = article
     NEXT_ARTICLE_ID += 1
 
-    send_webhook("article.created", article)
+    tamper = request.args.get("tamper") == "true"
+    duplicate = request.args.get("duplicate") == "true"
+
+    send_webhook("article.created", article, tamper=tamper, duplicate=duplicate)
     return jsonify({**article, "links": make_article_links(article["id"])}), 201
 
 
@@ -258,7 +272,10 @@ def update_article(article_id: int) -> Response:
     if "content" in payload:
         article["content"] = str(payload["content"])
 
-    send_webhook("article.updated", article)
+    tamper = request.args.get("tamper") == "true"
+    duplicate = request.args.get("duplicate") == "true"
+
+    send_webhook("article.updated", article, tamper=tamper, duplicate=duplicate)
     return jsonify({**article, "links": make_article_links(article_id)})
 
 
@@ -274,7 +291,11 @@ def delete_article(article_id: int) -> Response:
     article = ARTICLES.pop(article_id, None)
     if not article:
         return jsonify({"error": "not found"}), 404
-    send_webhook("article.deleted", {"id": article_id})
+
+    tamper = request.args.get("tamper") == "true"
+    duplicate = request.args.get("duplicate") == "true"
+
+    send_webhook("article.deleted", {"id": article_id}, tamper=tamper, duplicate=duplicate)
     return jsonify({"status": "deleted", "id": article_id})
 
 
@@ -364,17 +385,99 @@ def webhook_receiver() -> Response:
     event_id = request.headers.get("X-Webhook-Id", "")
     timestamp = request.headers.get("X-Webhook-Timestamp", "")
     signature = request.headers.get("X-Webhook-Signature", "")
+    sub_id = request.headers.get("X-Subscription-Id", "")
 
-    expected = sign_payload(WEBHOOK_SHARED_SECRET, raw_body, timestamp)
-    if not hmac.compare_digest(signature, expected):
+    # Resolve secret based on subscription ID
+    secret = WEBHOOK_SHARED_SECRET
+    if sub_id in SUBSCRIPTIONS:
+        secret = SUBSCRIPTIONS[sub_id]["secret"]
+
+    expected = sign_payload(secret, raw_body, timestamp)
+    is_valid = hmac.compare_digest(signature, expected)
+    payload = request.get_json(silent=True) or {}
+    
+    event_type = payload.get("type", "unknown")
+    event_data = payload.get("data", {})
+
+    if not is_valid:
+        notification = {
+            "id": str(uuid.uuid4()),
+            "event_id": event_id,
+            "type": event_type,
+            "status": "signature_error",
+            "message": f"❌ Signature Verification Failed for '{event_type}'. Secret mismatches payload signature.",
+            "timestamp": now_iso(),
+            "data": event_data
+        }
+        RECEIVED_NOTIFICATIONS.append(notification)
         return jsonify({"error": "invalid signature"}), 400
 
     if event_id in SEEN_EVENT_IDS:
+        notification = {
+            "id": str(uuid.uuid4()),
+            "event_id": event_id,
+            "type": event_type,
+            "status": "duplicate",
+            "message": f"⚠️ Duplicate event '{event_type}' ignored (Idempotent receiver prevented reprocessing).",
+            "timestamp": now_iso(),
+            "data": event_data
+        }
+        RECEIVED_NOTIFICATIONS.append(notification)
         return jsonify({"status": "duplicate"}), 200
 
     add_seen_event(event_id)
-    payload = request.get_json(silent=True) or {}
+    
+    if event_type == "article.created":
+        msg = f"🔔 Event: '{event_data.get('title')}' was created successfully! (ID: {event_data.get('id')})"
+    elif event_type == "article.updated":
+        msg = f"🔔 Event: '{event_data.get('title')}' was updated successfully! (ID: {event_data.get('id')})"
+    elif event_type == "article.deleted":
+        msg = f"🔔 Event: Article with ID: {event_data.get('id')} was deleted."
+    else:
+        msg = f"🔔 Event: Received '{event_type}' event."
+
+    notification = {
+        "id": str(uuid.uuid4()),
+        "event_id": event_id,
+        "type": event_type,
+        "status": "verified",
+        "message": msg,
+        "timestamp": now_iso(),
+        "data": event_data
+    }
+    RECEIVED_NOTIFICATIONS.append(notification)
     return jsonify({"status": "received", "event": payload})
+
+
+@app.route("/")
+def index() -> Response:
+    return app.send_static_file("index.html")
+
+
+@app.get("/notifications")
+def list_notifications() -> Response:
+    """
+    List received notifications from webhook receiver.
+    ---
+    responses:
+      200:
+        description: OK
+    """
+    return jsonify({"items": RECEIVED_NOTIFICATIONS})
+
+
+@app.post("/notifications/clear")
+def clear_notifications() -> Response:
+    """
+    Clear webhook notifications.
+    ---
+    responses:
+      200:
+        description: OK
+    """
+    RECEIVED_NOTIFICATIONS.clear()
+    return jsonify({"status": "cleared"})
+
 
 
 if __name__ == "__main__":
