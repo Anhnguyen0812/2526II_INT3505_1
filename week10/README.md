@@ -54,6 +54,7 @@ Mở trình duyệt:
 - Health: http://localhost:8000/health
 - Items: http://localhost:8000/items
 - Metrics: http://localhost:8000/metrics
+- Tracing: xem trong Jaeger UI (khi bật tracing)
 
 ## Ví dụ gọi API
 
@@ -88,6 +89,13 @@ curl -X POST http://localhost:8000/items \
 - Trường log quan trọng: `request_id`, method, path, status, latency, ip, user_agent.
 - Lợi ích: truy vết lỗi, hỗ trợ điều tra sự cố, đối soát audit.
 
+**Khái niệm**
+
+- Log là bản ghi sự kiện theo thời điểm, phù hợp debug và điều tra.
+- Request log: ghi nhận thông tin của từng request.
+- Audit log: ghi nhận hành động có ảnh hưởng đến dữ liệu/bảo mật.
+- `request_id`: định danh một request để truy vết xuyên suốt log.
+
 Ví dụ log:
 
 ```
@@ -102,6 +110,27 @@ Ví dụ log:
 - `rate_limit_hits_total`: số lần bị rate limit.
 
 Prometheus sẽ scrape tại `GET /metrics`.
+
+**Khái niệm**
+
+- Metrics là số liệu định lượng để quan sát hệ thống theo thời gian.
+- Counter: chỉ tăng, dùng cho tổng số sự kiện (VD: tổng request).
+- Histogram: thống kê phân phối độ trễ theo các ngưỡng (bucket), dùng để tính p95/p99.
+- Labels: thuộc tính gắn vào metric (VD: method, path, status) giúp phân tách số liệu.
+
+**Ví dụ đọc metrics**
+
+```
+http_requests_total{method="GET",path="/items",status="200"} 2
+http_request_duration_seconds_bucket{method="GET",path="/items",le="0.1"} 2
+http_request_duration_seconds_count{method="GET",path="/items"} 2
+http_request_duration_seconds_sum{method="GET",path="/items"} 0.015
+```
+
+- Dòng `http_requests_total` cho biết đã có 2 request `GET /items` trả về 200.
+- `*_bucket` là số request có latency <= mốc `le`.
+- `*_count` là tổng số request đo được.
+- `*_sum` là tổng thời gian xử lý (giây).
 
 ### 3) Rate Limiting
 
@@ -121,6 +150,28 @@ Prometheus sẽ scrape tại `GET /metrics`.
 - Metrics: theo dõi sức khỏe, thiết lập alert.
 - Tracing: giúp nhìn thấy luồng request xuyên dịch vụ (OpenTelemetry).
 
+Lưu ý: Swagger chỉ hiển thị tài liệu API. Logs xem ở terminal, metrics ở `GET /metrics`, tracing xem ở Jaeger UI.
+
+**Tracing là gì?**
+
+- Trace là toàn bộ hành trình của 1 request qua các bước.
+- Span là một bước con (VD: xử lý request, gọi DB, gọi API ngoài).
+- Trace ID giúp liên kết các span trong cùng 1 request.
+- Hữu ích: tìm nút thắt cổ chai, nhìn đường đi request xuyên dịch vụ.
+
+**Cách xem tracing trong bài này**
+
+- Bật tracing bằng biến môi trường `ENABLE_TRACING=true`.
+- Xem trace trong Jaeger UI theo service `week10-service`.
+- Mỗi request sẽ trả header `X-Trace-Id` nếu tracing bật.
+
+**Demo nhanh**
+
+1. Bật tracing và chạy server.
+2. Gọi `GET /health` hoặc `GET /items`.
+3. Mở Jaeger UI, tìm service `week10-service` và chọn trace mới nhất.
+4. Đối chiếu `trace_id` trong log với trace ID hiện trên Jaeger.
+
 ### 6) Circuit Breaker (khái niệm)
 
 - Dùng khi gọi service bên ngoài có thể lỗi/timeout.
@@ -133,6 +184,22 @@ Prometheus sẽ scrape tại `GET /metrics`.
 - `LOG_LEVEL`: mức log (INFO, DEBUG, ...).
 - `API_KEY`: bật bảo vệ cho `POST /items` nếu có giá trị.
 - `RATE_LIMIT_STORAGE_URI`: nơi lưu rate limit state, mặc định `memory://`.
+- `ENABLE_TRACING`: bật tracing (true/false).
+- `OTEL_EXPORTER_OTLP_ENDPOINT`: địa chỉ OTLP HTTP (mặc định `http://localhost:4318/v1/traces`).
+- `OTEL_EXPORTER_OTLP_PROTOCOL`: giao thức OTLP (`http/protobuf`).
+- `OTEL_SERVICE_NAME`: tên service cho trace (mặc định `week10-service`).
+
+## Bật tracing và xem Jaeger UI
+
+1. Bật tracing khi chạy API:
+
+```bash
+export ENABLE_TRACING=true
+export OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4318/v1/traces"
+python main.py
+```
+
+2. Truy cập Jaeger UI (vd: http://localhost:16686) và tìm service `week10-service`.
 
 ## Deploy lên Vercel (Flask + Swagger)
 

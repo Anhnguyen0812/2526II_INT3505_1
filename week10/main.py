@@ -4,11 +4,20 @@ import time
 import uuid
 from functools import wraps
 
-from flask import Flask, Response, jsonify, request
+from flask import Flask, Response, jsonify, request, has_request_context
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from flasgger import Swagger
+from flasgger import Swagger, swag_from
+from dotenv import load_dotenv
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.instrumentation.flask import FlaskInstrumentor
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
+
+load_dotenv()
 
 APP_NAME = "week10-service"
 API_KEY = os.getenv("API_KEY")
@@ -20,19 +29,75 @@ app.config["SWAGGER"] = {
 }
 
 Swagger(app)
+# Flasgger spec for POST /items to avoid YAML indentation issues.
+CREATE_ITEM_SPEC = {
+    "parameters": [
+        {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": False,
+            "schema": {"type": "string"},
+        },
+        {
+            "in": "body",
+            "name": "body",
+            "required": True,
+            "schema": {
+                "type": "object",
+                "required": ["name"],
+                "properties": {"name": {"type": "string"}},
+            },
+        },
+    ],
+    "responses": {
+        201: {"description": "Created"},
+        400: {"description": "Bad Request"},
+        401: {"description": "Unauthorized"},
+    },
+}
 
 # Basic logging for audit and ops visibility.
+_base_factory = logging.getLogRecordFactory()
+
+
+def _record_factory(*args, **kwargs):
+    record = _base_factory(*args, **kwargs)
+    if not hasattr(record, "request_id"):
+        record.request_id = "-"
+    if not hasattr(record, "trace_id"):
+        record.trace_id = "-"
+    if not hasattr(record, "span_id"):
+        record.span_id = "-"
+    return record
+
+
+logging.setLogRecordFactory(_record_factory)
+
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
-    format="%(asctime)s %(levelname)s %(name)s request_id=%(request_id)s %(message)s",
+    format=(
+        "%(asctime)s %(levelname)s %(name)s request_id=%(request_id)s "
+        "trace_id=%(trace_id)s span_id=%(span_id)s %(message)s"
+    ),
 )
 logger = logging.getLogger(APP_NAME)
 
 
 class RequestIdFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
-        if not hasattr(record, "request_id"):
+        if has_request_context() and hasattr(request, "request_id"):
+            record.request_id = request.request_id
+        elif not hasattr(record, "request_id"):
             record.request_id = "-"
+        if not hasattr(record, "trace_id") or not hasattr(record, "span_id"):
+            span = trace.get_current_span()
+            span_context = span.get_span_context()
+            if span_context and span_context.is_valid:
+                record.trace_id = format(span_context.trace_id, "032x")
+                record.span_id = format(span_context.span_id, "016x")
+            else:
+                record.trace_id = "-"
+                record.span_id = "-"
         return True
 
 
@@ -69,6 +134,18 @@ limiter = Limiter(
 limiter.init_app(app)
 
 
+def setup_tracing() -> None:
+    if os.getenv("ENABLE_TRACING", "false").lower() not in {"1", "true", "yes", "on"}:
+        return
+    endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318/v1/traces")
+    resource = Resource.create({"service.name": os.getenv("OTEL_SERVICE_NAME", APP_NAME)})
+    provider = TracerProvider(resource=resource)
+    trace.set_tracer_provider(provider)
+    exporter = OTLPSpanExporter(endpoint=endpoint)
+    provider.add_span_processor(BatchSpanProcessor(exporter))
+    FlaskInstrumentor().instrument_app(app)
+
+
 @app.before_request
 def attach_request_id() -> None:
     request.request_id = request.headers.get("X-Request-Id", str(uuid.uuid4()))
@@ -91,8 +168,11 @@ def record_metrics(response: Response) -> Response:
         elapsed,
         client_ip,
         user_agent,
-        extra={"request_id": request.request_id},
     )
+    span = trace.get_current_span()
+    span_context = span.get_span_context()
+    if span_context and span_context.is_valid:
+        response.headers["X-Trace-Id"] = format(span_context.trace_id, "032x")
     response.headers["X-Request-Id"] = request.request_id
     return response
 
@@ -105,10 +185,7 @@ def require_api_key(handler):
         api_key = request.headers.get("X-API-Key")
         if api_key != API_KEY:
             AUTH_FAILURES.labels(request.path).inc()
-            logger.warning(
-                "auth failed",
-                extra={"request_id": request.request_id},
-            )
+            logger.warning("auth failed")
             return jsonify({"error": "unauthorized"}), 401
         return handler(*args, **kwargs)
 
@@ -148,33 +225,8 @@ def list_items() -> Response:
 @app.post("/items")
 @limiter.limit("5 per minute")
 @require_api_key
+@swag_from(CREATE_ITEM_SPEC)
 def create_item() -> Response:
-        """
-        Create demo item.
-        ---
-        parameters:
-            - in: header
-                name: X-API-Key
-                required: false
-                schema:
-                    type: string
-            - in: body
-                name: body
-                required: true
-                schema:
-                    type: object
-                    required: [name]
-                    properties:
-                        name:
-                            type: string
-        responses:
-            201:
-                description: Created
-            400:
-                description: Bad Request
-            401:
-                description: Unauthorized
-        """
         payload = request.get_json(silent=True) or {}
         name = payload.get("name")
         if not isinstance(name, str) or not name.strip():
@@ -191,10 +243,7 @@ def metrics() -> Response:
 @app.errorhandler(429)
 def rate_limit_handler(error: Exception) -> Response:
     RATE_LIMIT_HITS.labels(request.path).inc()
-    logger.warning(
-        "rate limit exceeded",
-        extra={"request_id": getattr(request, "request_id", "unknown")},
-    )
+    logger.warning("rate limit exceeded")
     return jsonify({"error": "rate limit exceeded"}), 429
 
 
@@ -209,5 +258,6 @@ def unauthorized_handler(error: Exception) -> Response:
 
 
 if __name__ == "__main__":
+    setup_tracing()
     port = int(os.getenv("PORT", "8000"))
     app.run(host="0.0.0.0", port=port)

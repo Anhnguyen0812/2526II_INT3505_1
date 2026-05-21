@@ -2,3 +2,7 @@ flask
 flasgger
 prometheus-client
 flask-limiter
+python-dotenv
+opentelemetry-sdk
+opentelemetry-exporter-otlp-proto-http
+opentelemetry-instrumentation-flask
