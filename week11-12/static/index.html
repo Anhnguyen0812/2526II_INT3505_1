@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Design Patterns Dashboard</title>
+    <!-- Modern Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-logo">
+                <span class="logo-icon">⚡</span>
+                <div class="logo-text">
+                    <h1>API Design Patterns</h1>
+                    <p class="subtitle">Interactive Sandbox for CRUD, Query, HATEOAS, & Webhook security</p>
+                </div>
+            </div>
+            <div class="header-meta">
+                <span class="badge status-live">● API Live</span>
+                <span class="system-time" id="system-time">--:--:--</span>
+            </div>
+        </header>
+
+        <!-- Main Dashboard Layout -->
+        <main class="dashboard-grid">
+            
+            <!-- Left Side: Interactive Playground -->
+            <div class="column-left">
+                
+                <!-- Section 1: CRUD & Query Operations -->
+                <section class="dashboard-card card-glow">
+                    <div class="card-header">
+                        <h2>📰 Article Catalog Manager</h2>
+                        <div class="header-actions">
+                            <span class="badge pattern-tag">CRUD</span>
+                            <span class="badge pattern-tag">Query</span>
+                            <span class="badge pattern-tag">HATEOAS</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Search & Filter (Query Pattern) -->
+                    <div class="search-bar">
+                        <div class="input-wrapper search-input">
+                            <span class="input-icon">🔍</span>
+                            <input type="text" id="search-query" placeholder="Tìm kiếm theo tiêu đề...">
+                        </div>
+                        <div class="input-wrapper status-filter">
+                            <select id="filter-status">
+                                <option value="">Tất cả trạng thái</option>
+                                <option value="published">Published</option>
+                                <option value="draft">Draft</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-secondary" id="btn-filter">Lọc</button>
+                    </div>
+
+                    <!-- Article Grid/Table -->
+                    <div class="articles-table-wrapper">
+                        <table class="data-table" id="articles-table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Tiêu đề</th>
+                                    <th>Trạng thái</th>
+                                    <th>Ngày tạo</th>
+                                    <th>Hành động (HATEOAS Links)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="articles-list">
+                                <tr>
+                                    <td colspan="5" class="text-center loading-text">Đang tải danh sách bài viết...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Pagination (HATEOAS navigation) -->
+                    <div class="pagination-container" id="pagination-controls">
+                        <!-- Rendered by JS -->
+                    </div>
+                </section>
+
+                <!-- Section 2: Create Article Form & Simulations -->
+                <section class="dashboard-card">
+                    <div class="card-header">
+                        <h2 id="form-title">✍️ Viết Bài Mới</h2>
+                        <span class="badge pattern-tag">Event-driven</span>
+                    </div>
+                    <form id="article-form" class="dashboard-form">
+                        <input type="hidden" id="article-id" value="">
+                        
+                        <div class="form-group">
+                            <label for="article-title">Tiêu đề bài viết <span class="required">*</span></label>
+                            <input type="text" id="article-title" required placeholder="Nhập tiêu đề, ví dụ: 5 Mẫu thiết kế API phổ biến...">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="article-status">Trạng thái <span class="required">*</span></label>
+                            <select id="article-status" required>
+                                <option value="published">Published (Công khai)</option>
+                                <option value="draft">Draft (Bản nháp)</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="article-content">Nội dung bài viết</label>
+                            <textarea id="article-content" rows="3" placeholder="Nhập tóm tắt nội dung bài viết..."></textarea>
+                        </div>
+
+                        <!-- Webhook Simulation Options (For Learning) -->
+                        <div class="simulation-box">
+                            <div class="simulation-header">
+                                <span class="sim-icon">⚙️</span>
+                                <h4>Giả lập lỗi Webhook (Security & Idempotency Testing)</h4>
+                            </div>
+                            <div class="checkbox-grid">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="sim-tamper">
+                                    <span class="checkbox-custom"></span>
+                                    <span class="checkbox-text">
+                                        <strong>Tamper Webhook Signature</strong>
+                                        <small class="help-block">Gửi sai chữ ký (mô phỏng tấn công giả mạo)</small>
+                                    </span>
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="sim-duplicate">
+                                    <span class="checkbox-custom"></span>
+                                    <span class="checkbox-text">
+                                        <strong>Duplicate Webhook Delivery</strong>
+                                        <small class="help-block">Gửi trùng lặp request (kiểm tra tính lặp lại - Idempotency)</small>
+                                    </span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="form-buttons">
+                            <button type="submit" class="btn btn-primary" id="btn-submit-article">Tạo Bài Viết & Phát Sự Kiện</button>
+                            <button type="button" class="btn btn-ghost hidden" id="btn-cancel-edit">Hủy Chỉnh Sửa</button>
+                        </div>
+                    </form>
+                </section>
+            </div>
+
+            <!-- Right Side: Webhook & Notifications Center -->
+            <div class="column-right">
+                
+                <!-- Section 3: Webhook Receiver Notification Center -->
+                <section class="dashboard-card card-glow-green notification-card">
+                    <div class="card-header">
+                        <h2>🔔 Notification Event Hub (Webhook Receiver)</h2>
+                        <div class="header-actions">
+                            <span class="badge pattern-tag">Webhook</span>
+                            <button class="btn-clear" id="btn-clear-notifications" title="Xóa logs">🗑️ Xóa</button>
+                        </div>
+                    </div>
+                    <div class="notifications-container" id="notifications-list">
+                        <div class="empty-state">
+                            <div class="empty-icon">🔔</div>
+                            <p>Chưa nhận được sự kiện nào. Hãy tạo bài viết hoặc cập nhật để kích hoạt webhook phát sự kiện.</p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Section 4: Webhook Subscriptions -->
+                <section class="dashboard-card">
+                    <div class="card-header">
+                        <h2>🔗 Webhook Subscriptions Manager</h2>
+                        <span class="badge status-ok">Active</span>
+                    </div>
+                    
+                    <!-- Subscription Form -->
+                    <form id="subscribe-form" class="subscribe-form">
+                        <div class="form-group-inline">
+                            <input type="url" id="sub-url" required placeholder="URL nhận Webhook (ví dụ: http://...)">
+                            <button type="submit" class="btn btn-primary">Đăng ký</button>
+                        </div>
+                        <div class="events-checkboxes">
+                            <label>Chọn Sự Kiện:</label>
+                            <div class="checkbox-group">
+                                <label><input type="checkbox" name="sub-events" value="article.created" checked> Created</label>
+                                <label><input type="checkbox" name="sub-events" value="article.updated" checked> Updated</label>
+                                <label><input type="checkbox" name="sub-events" value="article.deleted" checked> Deleted</label>
+                            </div>
+                        </div>
+                    </form>
+
+                    <!-- Active Subscriptions List -->
+                    <div class="subs-table-wrapper">
+                        <table class="data-table-compact">
+                            <thead>
+                                <tr>
+                                    <th>URL & Events</th>
+                                    <th>Secret Key (HMAC-SHA256)</th>
+                                    <th>Hành động</th>
+                                </tr>
+                            </thead>
+                            <tbody id="subscriptions-list">
+                                <tr>
+                                    <td colspan="3" class="text-center">Chưa có webhook subscriber nào được đăng ký.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="receiver-autofill-box">
+                        <p>💡 <strong>Demo nhanh:</strong> Nhấp vào nút bên dưới để tự động đăng ký endpoint nhận webhook nội bộ phục vụ bài thực hành:</p>
+                        <button class="btn btn-secondary btn-sm" id="btn-autofill-receiver">Đăng ký Demo Webhook Receiver</button>
+                    </div>
+                </section>
+
+                <!-- Section 5: API Pattern Insights -->
+                <section class="dashboard-card instructions-card">
+                    <div class="card-header">
+                        <h2>📚 API Design Patterns Guide</h2>
+                    </div>
+                    <div class="insight-content">
+                        <div class="pattern-item">
+                            <h5>CRUD Pattern</h5>
+                            <p>Tương tác tài nguyên trực tiếp: <code>POST /articles</code>, <code>GET /articles/&lt;id&gt;</code>, <code>PUT</code>, <code>DELETE</code>.</p>
+                        </div>
+                        <div class="pattern-item">
+                            <h5>Query Pattern</h5>
+                            <p>Lọc và tìm kiếm thông qua query parameters: <code>q</code>, <code>status</code>, <code>page</code>, <code>limit</code>.</p>
+                        </div>
+                        <div class="pattern-item">
+                            <h5>HATEOAS Pattern</h5>
+                            <p>Response trả về các siêu liên kết (<code>links</code>) giúp client biết các endpoint hành động có sẵn tiếp theo mà không cần xem tài liệu API.</p>
+                        </div>
+                        <div class="pattern-item">
+                            <h5>Webhook Security & Idempotency</h5>
+                            <p>Mỗi Subscriber có <strong>Secret Key</strong> để kiểm chứng tính xác thực (chữ ký gửi kèm header <code>X-Webhook-Signature</code>). Receiver lưu trữ <code>X-Webhook-Id</code> để phát hiện và bỏ qua các bản tin bị trùng lặp.</p>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+    
+    <script src="/static/app.js"></script>
+</body>
+</html>
