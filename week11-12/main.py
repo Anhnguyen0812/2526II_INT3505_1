@@ -48,6 +48,18 @@ def make_article_links(article_id: int) -> Dict[str, str]:
         "subscriptions": f"{base}/webhooks/subscriptions",
     }
 
+def api_links() -> Dict[str, str]:
+    base = request.host_url.rstrip("/")
+    return {
+        "self": f"{base}{request.path}",
+        "home": f"{base}/",
+        "health": f"{base}/health",
+        "articles": f"{base}/articles",
+        "subscriptions": f"{base}/webhooks/subscriptions",
+        "receiver": f"{base}/webhooks/receiver",
+        "notifications": f"{base}/notifications",
+    }
+
 
 def add_seen_event(event_id: str) -> None:
     SEEN_EVENT_IDS.append(event_id)
@@ -110,7 +122,7 @@ def health() -> Response:
       200:
         description: OK
     """
-    return jsonify({"status": "ok", "service": APP_NAME})
+    return jsonify({"status": "ok", "service": APP_NAME, "links": api_links()})
 
 
 @app.get("/articles")
@@ -167,7 +179,7 @@ def list_articles() -> Response:
             {**item, "links": make_article_links(item["id"])} for item in paged
         ],
         "count": len(items),
-        "links": links,
+        "links": {**api_links(), **links},
     })
 
 
@@ -201,7 +213,7 @@ def create_article() -> Response:
     status = payload.get("status")
     content = payload.get("content", "")
     if not isinstance(title, str) or not isinstance(status, str):
-        return jsonify({"error": "title and status are required"}), 400
+        return jsonify({"error": "title and status are required", "links": api_links()}), 400
 
     article = {
         "id": NEXT_ARTICLE_ID,
@@ -217,7 +229,7 @@ def create_article() -> Response:
     duplicate = request.args.get("duplicate") == "true"
 
     send_webhook("article.created", article, tamper=tamper, duplicate=duplicate)
-    return jsonify({**article, "links": make_article_links(article["id"])}), 201
+    return jsonify({**article, "links": {**api_links(), **make_article_links(article["id"])}}), 201
 
 
 @app.get("/articles/<int:article_id>")
@@ -233,8 +245,8 @@ def get_article(article_id: int) -> Response:
     """
     article = ARTICLES.get(article_id)
     if not article:
-        return jsonify({"error": "not found"}), 404
-    return jsonify({**article, "links": make_article_links(article_id)})
+        return jsonify({"error": "not found", "links": api_links()}), 404
+    return jsonify({**article, "links": {**api_links(), **make_article_links(article_id)}})
 
 
 @app.put("/articles/<int:article_id>")
@@ -263,7 +275,7 @@ def update_article(article_id: int) -> Response:
     payload = request.get_json(silent=True) or {}
     article = ARTICLES.get(article_id)
     if not article:
-        return jsonify({"error": "not found"}), 404
+        return jsonify({"error": "not found", "links": api_links()}), 404
 
     if "title" in payload:
         article["title"] = str(payload["title"]).strip()
@@ -276,7 +288,7 @@ def update_article(article_id: int) -> Response:
     duplicate = request.args.get("duplicate") == "true"
 
     send_webhook("article.updated", article, tamper=tamper, duplicate=duplicate)
-    return jsonify({**article, "links": make_article_links(article_id)})
+    return jsonify({**article, "links": {**api_links(), **make_article_links(article_id)}})
 
 
 @app.delete("/articles/<int:article_id>")
@@ -290,13 +302,13 @@ def delete_article(article_id: int) -> Response:
     """
     article = ARTICLES.pop(article_id, None)
     if not article:
-        return jsonify({"error": "not found"}), 404
+        return jsonify({"error": "not found", "links": api_links()}), 404
 
     tamper = request.args.get("tamper") == "true"
     duplicate = request.args.get("duplicate") == "true"
 
     send_webhook("article.deleted", {"id": article_id}, tamper=tamper, duplicate=duplicate)
-    return jsonify({"status": "deleted", "id": article_id})
+    return jsonify({"status": "deleted", "id": article_id, "links": api_links()})
 
 
 @app.post("/webhooks/subscriptions")
@@ -327,11 +339,11 @@ def create_subscription() -> Response:
     events = payload.get("events") or list(SUPPORTED_EVENTS)
 
     if not isinstance(url, str) or not url.startswith("http"):
-        return jsonify({"error": "url is required"}), 400
+        return jsonify({"error": "url is required", "links": api_links()}), 400
 
     for event in events:
         if event not in SUPPORTED_EVENTS:
-            return jsonify({"error": f"unsupported event {event}"}), 400
+            return jsonify({"error": f"unsupported event {event}", "links": api_links()}), 400
 
     sub_id = str(uuid.uuid4())
     sub = {
@@ -342,7 +354,7 @@ def create_subscription() -> Response:
         "created_at": now_iso(),
     }
     SUBSCRIPTIONS[sub_id] = sub
-    return jsonify(sub), 201
+    return jsonify({**sub, "links": api_links()}), 201
 
 
 @app.get("/webhooks/subscriptions")
@@ -354,7 +366,10 @@ def list_subscriptions() -> Response:
       200:
         description: OK
     """
-    return jsonify({"items": list(SUBSCRIPTIONS.values())})
+    return jsonify({
+        "items": [{**item, "links": api_links()} for item in SUBSCRIPTIONS.values()],
+        "links": api_links(),
+    })
 
 
 @app.delete("/webhooks/subscriptions/<sub_id>")
@@ -368,8 +383,8 @@ def delete_subscription(sub_id: str) -> Response:
     """
     sub = SUBSCRIPTIONS.pop(sub_id, None)
     if not sub:
-        return jsonify({"error": "not found"}), 404
-    return jsonify({"status": "deleted", "id": sub_id})
+        return jsonify({"error": "not found", "links": api_links()}), 404
+    return jsonify({"status": "deleted", "id": sub_id, "links": api_links()})
 
 
 @app.post("/webhooks/receiver")
@@ -410,7 +425,7 @@ def webhook_receiver() -> Response:
             "data": event_data
         }
         RECEIVED_NOTIFICATIONS.append(notification)
-        return jsonify({"error": "invalid signature"}), 400
+        return jsonify({"error": "invalid signature", "links": api_links()}), 400
 
     if event_id in SEEN_EVENT_IDS:
         notification = {
@@ -423,7 +438,7 @@ def webhook_receiver() -> Response:
             "data": event_data
         }
         RECEIVED_NOTIFICATIONS.append(notification)
-        return jsonify({"status": "duplicate"}), 200
+        return jsonify({"status": "duplicate", "links": api_links()}), 200
 
     add_seen_event(event_id)
     
@@ -446,12 +461,12 @@ def webhook_receiver() -> Response:
         "data": event_data
     }
     RECEIVED_NOTIFICATIONS.append(notification)
-    return jsonify({"status": "received", "event": payload})
+    return jsonify({"status": "received", "event": payload, "links": api_links()})
 
 
 @app.route("/")
 def index() -> Response:
-    return app.send_static_file("index.html")
+    return jsonify({"message": "week11-12 API", "links": api_links()})
 
 
 @app.get("/notifications")
@@ -463,7 +478,7 @@ def list_notifications() -> Response:
       200:
         description: OK
     """
-    return jsonify({"items": RECEIVED_NOTIFICATIONS})
+    return jsonify({"items": RECEIVED_NOTIFICATIONS, "links": api_links()})
 
 
 @app.post("/notifications/clear")
@@ -476,7 +491,7 @@ def clear_notifications() -> Response:
         description: OK
     """
     RECEIVED_NOTIFICATIONS.clear()
-    return jsonify({"status": "cleared"})
+    return jsonify({"status": "cleared", "links": api_links()})
 
 
 

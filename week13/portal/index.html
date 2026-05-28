@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ArticleDev Portal | API for Modern Publishing</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Fira+Code:wght@400&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #2563eb;
+            --bg: #f8fafc;
+            --text: #1e293b;
+            --code-bg: #1e1e1e;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            line-height: 1.6;
+            color: var(--text);
+            margin: 0;
+            background: var(--bg);
+        }
+        header {
+            background: #fff;
+            border-bottom: 1px solid #e2e8f0;
+            padding: 1rem 5%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary);
+        }
+        nav a {
+            margin-left: 1.5rem;
+            text-decoration: none;
+            color: var(--text);
+            font-weight: 600;
+        }
+        .hero {
+            padding: 4rem 5%;
+            text-align: center;
+            background: white;
+        }
+        .hero h1 {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+        .btn {
+            background: var(--primary);
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 6px;
+            text-decoration: none;
+            display: inline-block;
+            margin-top: 1rem;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 2rem auto;
+            padding: 0 5%;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+        .card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+        }
+        pre {
+            background: var(--code-bg);
+            color: #dcdcdc;
+            padding: 1rem;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.9rem;
+        }
+        .footer {
+            text-align: center;
+            padding: 2rem;
+            color: #64748b;
+            font-size: 0.875rem;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="logo">ArticleDev</div>
+    <nav>
+        <a href="#docs">Documentation</a>
+        <a href="#pricing">Pricing</a>
+        <a href="#dashboard">Dashboard</a>
+        <a href="#">Login</a>
+    </nav>
+</header>
+
+<section class="hero">
+    <h1>The Article Management API</h1>
+    <p>Build real-time publishing workflows with our robust REST API and Webhook system.</p>
+    <a href="#" class="btn">Get Started for Free</a>
+</section>
+
+<div class="container">
+    <h2 id="docs">Quick Start</h2>
+    <p>Fetch your latest articles with a simple GET request.</p>
+    <pre>
+curl -X GET "https://api.articledev.com/v1/articles" \
+     -H "Authorization: Bearer YOUR_API_KEY" \
+     -H "Accept: application/json"
+    </pre>
+
+    <div class="grid">
+        <div class="card">
+            <h3>Webhooks Integration</h3>
+            <p>Subscribe to <code>article.created</code> events and get notified instantly when new content hits our servers.</p>
+            <a href="#">View Webhook Docs →</a>
+        </div>
+        <div class="card">
+            <h3>SDKs & Libraries</h3>
+            <p>Ready-to-use libraries for Python, JavaScript, Go, and Ruby.</p>
+            <a href="#">Browse Repositories →</a>
+        </div>
+        <div class="card" id="pricing">
+            <h3>Flexible Pricing</h3>
+            <p>From hobbyists to global enterprises, we have a plan that scales with your growth.</p>
+            <a href="#">See Pricing Details →</a>
+        </div>
+    </div>
+</div>
+
+<footer class="footer">
+    &copy; 2026 ArticleDev Platform. All rights reserved.
+</footer>
+
+</body>
+</html>
